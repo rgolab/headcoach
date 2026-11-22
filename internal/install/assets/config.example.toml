@@ -1,0 +1,53 @@
+# headcoach configuration. Every key is optional. `hc config init` writes this file.
+
+host = "127.0.0.1"
+port = 7337
+# The hooks of a session you start yourself post to $HC_URL, else to 127.0.0.1:7337: set HC_URL too
+# when you change the port.
+
+# Where the board keeps its SQLite file.
+# db = "~/.local/state/headcoach/board.db"
+
+# Directories scanned for git repositories, offered in the New task form of the web board.
+# repo_roots = ["~/code"]
+
+# Sessions the board starts run in a tmux server of its own, so they never show up in your tmux.
+# `hc attach <id>` takes you into one and Ctrl-] brings you back. Set to false to open windows in your tmux.
+private_tmux = true
+
+# Only without private_tmux: the tmux session that new windows open in. Empty means the most recent one.
+tmux_session = ""
+
+# Base of a Jira issue link. Tasks that mention a key such as ABC-123 link to it.
+jira_url = ""
+# jira_url = "https://example.atlassian.net/browse/"
+
+# Context window, in tokens, for the context gauge of a session whose status line has not reported its
+# own yet. Use 1000000 with a 1M context model.
+context_window = 200000
+
+# Model that answers `hc ask` and the q key. A small one is quick and cheap. Empty means your default model.
+ask_model = "haiku"
+
+# Skills that count as a persona, shown in the PERSONA column: a regular expression on the skill name,
+# without its plugin prefix. A session or a sub-agent that loads one, such as /reviewer, takes it on.
+# persona_pattern = "(^|[-_])(developer|reviewer|architect|researcher|planner|tester)($|[-_])"
+
+# Shell commands that run a repository's tests: a regular expression. The review queue shows whether the
+# last one a session ran passed or failed. It matches where a command starts; an empty one turns it off.
+# test_pattern = '\b(make (check|test)|go test|cargo test|pytest|tox|(npm|pnpm|yarn|bun) (run )?test|mvn (verify|test)|gradlew? (check|test)|ctest|rspec|phpunit)\b'
+
+# Color theme of the terminal board: terminal (follows your terminal colors), bright, nord or k9s.
+# Try one with: hc tui --theme k9s
+theme = "terminal"
+
+# Folder that a bare name given to `hc new --dir` or to the board's "New task" resolves under:
+# with it, -C myidea means ~/code/myidea. A missing folder is created after a y/n prompt.
+# workdir = "~/code"
+
+# Profile name = command that launches Claude Code for it.
+# A session whose CLAUDE_CONFIG_DIR ends with the profile name is filed under that profile.
+# With several accounts, name one profile per CLAUDE_CONFIG_DIR, for example:
+#   team = "CLAUDE_CONFIG_DIR=~/.claude-team claude"
+[profiles]
+default = "claude"

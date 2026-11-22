@@ -1,0 +1,29 @@
+# Changelog
+
+All notable changes to headcoach. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+## [1.0.0] - 2026-11-23
+
+The first public release of headcoach. `hc` puts every Claude Code session on one board, in the terminal and in the browser, so you see what each agent does, what waits on you, and what it costs.
+
+### Added
+
+- every Claude Code session becomes a task the moment you send its first prompt, in `Running`, `Waiting`, `Needs me`, `Review`, `Parked` or `Done`
+- a turn that ends on a question, or asks for your go such as `Reply "go"`, goes to `Needs me`, a plan or a change not committed, pushed or merged goes to `Review`
+- a task in `Done` stays on the board, dimmed, until `h` hides it; `d` shows the hidden ones
+- each task shows its context, tokens, cost at API prices, model, effort level and persona, with its sub-agents and background commands under it
+- the top of the board shows the 5 hour and 7 day usage limits of each account
+- `enter` opens a session, `a` enters it and `Ctrl-]` comes back, `q` asks about it without interrupting it, `r` replies to it
+- `n` starts a task: its folder with tab completion, its profile, then its title; `c` copies one, `A` adopts a session from your own tmux
+- `R` opens the review queue, `S` the schedules, `C` the columns, `v` selects several tasks to delete, move, park or hide at once, `?` lists every key
+- schedules start a task with the same prompt at a time of day, or on a cron expression; a run replaced by the next one goes to `Done` hidden
+- a task can carry a timer, and closes itself when it runs out
+- the web board, `hc open`, shows the same tasks in one column per state, and `hc pair` lets a phone reach it
+- `hc` commands do the same from a shell: `hc ls`, `hc new`, `hc ask`, `hc reply`, `hc show`, `hc review`, `hc limits`
+- `hc update`, or `u` on the board, installs the latest release, checked against its `SHA256SUMS`
+- four themes: `terminal`, `bright`, `nord` and `k9s`
+
+[Unreleased]: https://github.com/humblebundledore/headcoach/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/humblebundledore/headcoach/releases/tag/v1.0.0

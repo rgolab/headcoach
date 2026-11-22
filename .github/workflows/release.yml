@@ -1,0 +1,28 @@
+name: release
+
+# A pushed v* tag becomes a GitHub release: the binaries, their SHA-256 sums, and the notes of that
+# version in CHANGELOG.md.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: make check
+      - run: make dist VERSION=${{ github.ref_name }}
+      - name: Notes
+        run: scripts/changelog.sh ${{ github.ref_name }} > notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/hc-* dist/SHA256SUMS --title "headcoach $TAG" --notes-file notes.md --verify-tag

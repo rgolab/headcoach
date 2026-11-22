@@ -1,0 +1,24 @@
+name: pr-gate
+
+# Closes a pull request from outside the project. A maintainer can reopen it once an issue agreed on
+# the change. This workflow never checks out the pull request's code.
+on:
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    if: >-
+      !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+      && github.event.pull_request.user.login != 'dependabot[bot]'
+    steps:
+      - name: Close
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.html_url }}
+        run: |
+          gh pr close "$PR" --comment "Thanks for the change! headcoach takes bugs and ideas as issues first, see CONTRIBUTING.md. A maintainer reopens this pull request once an issue agreed on it."

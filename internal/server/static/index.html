@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>headcoach</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="theme-color" content="#2b5fd9">
+<style>
+/* Layout: one working screen. Six state columns side by side, a centred drawer over them for one session. */
+:root {
+  --bg: #eceff4; --surface: #ffffff; --panel: #f5f7fa; --line: #d3d8e2;
+  --fg: #151922; --muted: #5a6373; --accent: #2b5fd9; --on-accent: #ffffff;
+  --run: #2b5fd9; --need: #a85a00; --need-bg: #fff0d9; --need-line: #e6b566;
+  --rev: #6a45c2; --done: #2c7a4d; --idle: #6b7382; --hot: #c0392b; --scrim: rgba(15, 18, 24, .38); --you-bg: #ece6fb; --you-line: #b9a8ec; --agent-bg: #e8effd; --agent-line: #a5bdf2; --tool-bg: #e3f1e8; --tool-line: #9ccdb0;
+  --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1117; --surface: #171b24; --panel: #1c212c; --line: #2a3140;
+    --fg: #e5e8ee; --muted: #8d97a9; --accent: #7aa2ff; --on-accent: #0e1117;
+    --run: #7aa2ff; --need: #f0b25a; --need-bg: #2f2410; --need-line: #6e5320;
+    --rev: #b59bff; --done: #6fcf97; --idle: #8d97a9; --hot: #ff7b6b; --scrim: rgba(0, 0, 0, .55); --you-bg: #261f3f; --you-line: #5a4a94; --agent-bg: #152039; --agent-line: #34497f; --tool-bg: #0f1f17; --tool-line: #2c5a40;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1117; --surface: #171b24; --panel: #1c212c; --line: #2a3140;
+  --fg: #e5e8ee; --muted: #8d97a9; --accent: #7aa2ff; --on-accent: #0e1117;
+  --run: #7aa2ff; --need: #f0b25a; --need-bg: #2f2410; --need-line: #6e5320;
+  --rev: #b59bff; --done: #6fcf97; --idle: #8d97a9; --hot: #ff7b6b; --scrim: rgba(0, 0, 0, .55); --you-bg: #261f3f; --you-line: #5a4a94; --agent-bg: #152039; --agent-line: #34497f; --tool-bg: #0f1f17; --tool-line: #2c5a40;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; line-height: 1.45;
+  padding: 16px 20px 32px;
+}
+button, select, textarea, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--mono); font-size: 12px; }
+
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 16px; }
+.top h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+.top .grow { flex: 1; }
+.attn { font-size: 13px; color: var(--need); font-weight: 500; }
+.btn {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; cursor: pointer;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: 500; }
+.btn.small { padding: 3px 8px; font-size: 12px; }
+
+.board { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; align-items: start; }
+@media (max-width: 1000px) { .board { grid-template-columns: minmax(0, 1fr); } }
+/* Pairing: what a phone sees until hc pair lets it in. */
+.pair { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: var(--bg); }
+.pair form { width: min(100%, 360px); display: grid; gap: 12px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.pair img { width: 72px; height: 72px; justify-self: center; }
+.pair h1 { margin: 0; font-size: 20px; text-align: center; }
+.pair p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+.pair input { font: 500 24px var(--mono); letter-spacing: .12em; text-align: center; text-transform: uppercase; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); }
+.pair button { font: 600 16px var(--sans); padding: 12px; border: 0; border-radius: 8px; background: var(--accent); color: var(--on-accent); }
+.pair .err { color: var(--hot); min-height: 1.5em; }
+.col { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
+.col.over { border-color: var(--accent); }
+.col-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.col-head h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; margin: 0; }
+.col-head .n { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); flex: none; }
+.s-running .dot { background: var(--run); }
+.s-needs .dot { background: var(--need); }
+.s-review .dot { background: var(--rev); }
+.col.s-needs .col-head h2 { color: var(--need); }
+.cards { display: flex; flex-direction: column; gap: 8px; padding: 8px; min-height: 64px; }
+.empty { color: var(--muted); font-size: 12px; padding: 12px 4px; text-align: center; }
+
+.card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px;
+  display: flex; flex-direction: column; gap: 6px; cursor: pointer; min-width: 0;
+}
+.card:hover { border-color: var(--muted); }
+.card.dragging { opacity: .45; }
+@keyframes lit { from { background: color-mix(in srgb, var(--done) 22%, var(--surface)); border-color: var(--done); } }
+@keyframes lit-dot { from { background: var(--done); } }
+.card[data-lit], .list tr[data-lit] td { animation: lit 3.5s ease-out var(--lit) backwards; }
+[data-lit].s-done .dot { animation: lit-dot 3.5s ease-out var(--lit) backwards; }
+@media (prefers-reduced-motion: reduce) { .card[data-lit], .list tr[data-lit] td, [data-lit] .dot { animation: none; } }
+.card.s-needs { background: var(--need-bg); border-color: var(--need-line); }
+.card .title { font-weight: 500; overflow-wrap: anywhere; }
+.card .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--muted); }
+.card .last { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.card .ask { font-size: 13px; overflow-wrap: anywhere; }
+.card.s-running .last::before { content: "\25B8  "; color: var(--run); }
+.chip { border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; font-size: 11px; color: var(--muted); }
+
+.kids { display: flex; flex-direction: column; gap: 4px; }
+.kids::before { content: "\2193"; color: var(--muted); padding-left: 9px; line-height: 1.1; }
+.kids.plain::before { content: none; }
+.kid { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; border: 1px solid var(--line); border-radius: 4px; padding: 3px 7px; font-size: 12px; background: var(--panel); min-width: 0; }
+.kid .dot { align-self: center; }
+.kid .name { font-family: var(--mono); }
+.kid .desc { color: var(--muted); overflow-wrap: anywhere; min-width: 0; flex: 1 1 10em; }
+.tok { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
+.kid .tok { margin-left: auto; }
+.ctx { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; white-space: nowrap; color: var(--done); }
+.ctx.warm { color: var(--need); }
+.ctx.hot { color: var(--hot); font-weight: 500; }
+.ctx .bar { width: 44px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.ctx .bar span { display: block; height: 100%; background: currentColor; transition: width .6s; }
+#limits { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+#limits .who { color: var(--muted); }
+#limits .stale { opacity: .5; }
+.limit-warn { background: var(--hot); color: #fff; border-radius: 4px; padding: 1px 8px; font-size: 12px; font-weight: 500; }
+.sort { font-size: 13px; color: var(--muted); }
+.sort select { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.kid.k-running .dot { background: var(--run); }
+.kid.k-done .dot { background: var(--idle); }
+.kid.k-done .name { color: var(--muted); }
+
+.seg { display: flex; }
+.seg .btn { border-radius: 0; }
+.seg .btn:first-child { border-radius: 6px 0 0 6px; }
+.seg .btn:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
+.seg .btn[aria-pressed="true"] { background: var(--fg); border-color: var(--fg); color: var(--bg); }
+
+.list { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+.list table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.list th { text-align: left; font-family: var(--sans); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); background: var(--panel); }
+.list th, .list td { padding: 6px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.list tbody tr { cursor: pointer; }
+.list tbody tr:hover { background: var(--panel); }
+.list tbody tr:last-child td { border-bottom: 0; }
+.list tr.s-needs td { background: var(--need-bg); }
+.list tr.child td { color: var(--muted); }
+.list td.task { font-family: var(--sans); font-size: 13px; font-weight: 500; }
+.list .st { display: inline-flex; align-items: center; gap: 6px; }
+
+.reply textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; }
+
+.scrim { position: fixed; inset: 0; background: var(--scrim); z-index: 20; }
+.drawer {
+  position: fixed; top: 5vh; bottom: 5vh; left: 50%; transform: translateX(-50%); width: min(860px, calc(100% - 32px)); z-index: 21;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .35); display: flex; flex-direction: column;
+}
+.d-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); }
+.d-head h2 { font-size: 16px; font-weight: 600; margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; text-wrap: balance; }
+.d-body { overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
+.label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 6px; }
+.kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.cmd { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; }
+.cmd code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: var(--mono); font-size: 12px; }
+.trail { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.trail b { color: var(--fg); font-weight: 500; }
+.moverow { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.moverow select { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.log { display: flex; flex-direction: column; gap: 8px; }
+.turn { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-width: 0; overflow-wrap: anywhere; }
+.turn .who { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 2px; }
+.turn.you { background: var(--panel); }
+.turn.tool { font-family: var(--mono); font-size: 12px; color: var(--muted); border-style: dashed; }
+.turn.ask { background: var(--need-bg); border-color: var(--need-line); }
+.turn.ask .who { color: var(--need); }
+.gap { text-align: center; font-size: 12px; color: var(--muted); }
+.reply { border-top: 1px solid var(--line); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+.reply textarea { resize: vertical; min-height: 60px; }
+.reply .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.reply .hint { color: var(--muted); font-size: 12px; flex: 1; min-width: 0; }
+html, body { margin: 0; }
+[hidden] { display: none !important; }
+.conn { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.conn .dot { background: var(--done); }
+.conn.down { color: var(--need); }
+.conn.down .dot { background: var(--need); }
+.card .title { display: flex; gap: 8px; align-items: baseline; }
+.card .title span:first-child { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.chip.closed { flex: none; }
+.card .meta .idle { color: var(--need); }
+.card.s-running .meta .idle, .card.s-done .meta .idle, .card.s-parked .meta .idle, .card.s-backlog .meta .idle { color: var(--muted); }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.list .tags { flex-wrap: nowrap; }
+.tag { border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; font-size: 11px; line-height: 18px; color: var(--muted); text-decoration: none; white-space: nowrap; }
+.tag.persona { color: var(--done); border-color: var(--done); }
+a.tag { font-family: var(--mono); color: var(--accent); border-color: var(--accent); }
+a.tag:hover { background: var(--accent); color: var(--on-accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.danger { color: var(--need); }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 16px;
+  display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+.panel textarea, .panel input, .panel select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; width: 100%; }
+.panel textarea { min-height: 72px; resize: vertical; }
+.panel .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: end; }
+.panel .row > label { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.panel .row > label.narrow { flex: 0 0 140px; min-width: 120px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.turn { white-space: pre-wrap; }
+.turn.tool { white-space: normal; padding: 4px 10px; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 40; max-width: min(560px, calc(100% - 32px));
+  background: var(--fg); color: var(--bg); border-radius: 6px; padding: 10px 14px; font-size: 13px; }
+.blank { border: 1px dashed var(--line); border-radius: 8px; padding: 28px 20px; color: var(--muted); max-width: 640px; }
+.blank b { color: var(--fg); font-weight: 600; }
+.blank code { font-family: var(--mono); font-size: 12px; }
+.list td.task { max-width: 420px; overflow: hidden; text-overflow: ellipsis; }
+.list td.lastcol { max-width: 380px; overflow: hidden; text-overflow: ellipsis; }
+.screen { font-family: var(--mono); font-size: 11px; line-height: 1.35; white-space: pre; overflow-x: auto; background: var(--panel);
+  border: 1px solid var(--need-line); border-radius: 6px; padding: 8px 10px; margin: 0; max-height: 300px; overflow-y: auto; }
+.keys { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+.keys .btn { font-family: var(--mono); font-size: 12px; min-width: 34px; }
+.keys .sep { color: var(--muted); font-size: 12px; margin-left: 6px; }
+.log { gap: 14px; }
+.turn .who { display: block; width: fit-content; border-radius: 4px; padding: 1px 8px; margin-bottom: 8px; color: var(--on-accent); letter-spacing: .08em; }
+.turn.you { margin-left: 14%; background: var(--you-bg); border: 1px solid var(--you-line); border-left: 5px solid var(--rev); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.turn.you .who { background: var(--rev); }
+.turn.agent { margin-right: 6%; background: var(--agent-bg); border: 1px solid var(--agent-line); border-left: 5px solid var(--run); border-radius: 8px; }
+.turn.agent .who, .turn.md .who { background: var(--run); color: var(--on-accent); }
+.turn.tool { margin: -6px 6% -6px 28px; padding: 5px 10px; border: 1px solid var(--tool-line); border-left: 5px solid var(--done); border-radius: 0; background: var(--tool-bg); color: var(--fg); font-size: 12px; }
+.turn.tool + .turn.tool { margin-top: -15px; border-top: 0; }
+.turn.tool .who { display: none; }
+.turn.tool::before { content: "TOOL"; display: inline-block; font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: .08em; background: var(--done); color: var(--on-accent); border-radius: 3px; padding: 0 6px; margin-right: 8px; }
+.turn.ask .who { background: var(--need); }
+.turn.md { white-space: normal; font-size: 14px; line-height: 1.6; padding: 12px 14px; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md p, .md ul, .md ol, .md pre, .md blockquote, .md table { margin: 0 0 12px; }
+.md h1, .md h2, .md h3, .md h4 { font-weight: 600; text-wrap: balance; color: var(--accent); }
+.md h1, .md h2 { font-size: 16px; margin: 22px 0 10px; padding: 6px 10px; background: var(--surface); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0; }
+.md h3, .md h4 { font-size: 14px; margin: 16px 0 6px; color: var(--rev); }
+.md strong { color: var(--fg); font-weight: 600; }
+.md p > strong:first-child { color: var(--done); }
+.md ul, .md ol { padding-left: 22px; }
+.md li { margin: 4px 0; }
+.md li::marker { color: var(--accent); }
+.md li > ul, .md li > ol { margin: 4px 0; }
+.md code { font-family: var(--mono); font-size: 12.5px; color: var(--need); background: var(--need-bg); border-radius: 4px; padding: 1px 5px; }
+.md h1 code, .md h2 code, .md h3 code { color: inherit; background: none; padding: 0; font-size: inherit; }
+.md pre { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow-x: auto; }
+.md pre code { color: var(--fg); background: none; padding: 0; }
+.md blockquote { border-left: 3px solid var(--done); background: var(--surface); border-radius: 0 6px 6px 0; padding: 8px 12px; color: var(--fg); }
+.md blockquote p { margin-bottom: 6px; }
+.md blockquote p:last-child { margin-bottom: 0; }
+.md a { color: var(--accent); }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+.md table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
+.md th, .md td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; vertical-align: top; }
+.md th { background: var(--panel); font-weight: 600; color: var(--accent); }
+.d-head input { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>headcoach</h1>
+  <span class="conn" id="conn"><span class="dot"></span><span id="conn-text">connecting</span></span>
+  <span class="grow"></span>
+  <span class="attn" id="attn"></span>
+  <span id="usage" title="Tokens of every task on the board"></span>
+  <span id="limits"></span>
+  <label class="sort">Sort <select id="sortby">
+    <option value="state">by state</option><option value="cost">by cost</option><option value="tokens">by tokens used</option><option value="ctx">by context size</option>
+  </select></label>
+  <div class="seg" role="group" aria-label="View">
+    <button class="btn" type="button" data-view="board">Board</button>
+    <button class="btn" type="button" data-view="list">List</button>
+  </div>
+  <button class="btn primary" id="newbtn" type="button">New task</button>
+</header>
+
+<form class="panel" id="newpanel" hidden>
+  <label class="label" for="new-prompt">What should the agent do?</label>
+  <textarea id="new-prompt" required placeholder="Describe the task. This becomes the first prompt of the session."></textarea>
+  <div class="row">
+    <label>Directory
+      <input id="new-dir" list="dirs" placeholder="~/code/..." autocomplete="off">
+      <datalist id="dirs"></datalist>
+    </label>
+    <label class="narrow">Profile
+      <select id="new-profile"></select>
+    </label>
+  </div>
+  <div class="actions">
+    <button class="btn primary" type="submit" data-start="1">Add and start</button>
+    <button class="btn" type="submit" data-start="">Add to backlog</button>
+    <button class="btn" type="button" id="newcancel">Cancel</button>
+  </div>
+</form>
+
+<main class="board" id="board"></main>
+<div id="overlay"></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+const STATES = [
+  { id: "backlog", name: "Backlog" }, { id: "running", name: "Running" }, { id: "needs", name: "Needs me" },
+  { id: "review", name: "Review" }, { id: "parked", name: "Parked" }, { id: "done", name: "Done" }
+];
+const ORDER = ["needs", "running", "review", "backlog", "parked", "done"];
+const POLL_MS = 2000;
+
+let tasks = [], detail = null, openId = null, dragId = null, view = "board";
+let boardSig = "", detailSig = "", loaded = false, confirmDelete = false, editingTitle = false;
+try { if (localStorage.getItem("view") === "list") view = "list"; } catch (err) {}
+let sortBy = "state";
+try { sortBy = ["cost", "tokens", "ctx"].includes(localStorage.getItem("sort")) ? localStorage.getItem("sort") : "state"; } catch (err) {}
+
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const stateName = id => STATES.find(s => s.id === id).name;
+
+function human(sec) {
+  if (sec < 60) return sec + "s";
+  if (sec < 3600) return Math.floor(sec / 60) + " min";
+  if (sec < 86400) return Math.floor(sec / 3600) + " h " + String(Math.floor(sec % 3600 / 60)).padStart(2, "0");
+  return Math.floor(sec / 86400) + " d";
+}
+function count(n) {
+  for (const [limit, unit] of [[1e9, "G"], [1e6, "M"], [1e3, "k"]]) {
+    if (n >= limit) { const v = n / limit; return (v < 10 ? v.toFixed(1) : v.toFixed(0)) + unit; }
+  }
+  return String(n);
+}
+const tokenTitle = k => `Tokens: ${k.in} in, ${k.out} out, ${k.cache_read} read from cache, ${k.cache_write} written to cache`;
+function tokensHtml(k) {
+  if (!k || !(k.in + k.out + k.cache_read + k.cache_write)) return "";
+  return `<span class="tok" title="${tokenTitle(k)}">in ${count(k.in)} · out ${count(k.out)} · cache ${count(k.cache_read + k.cache_write)}</span>`;
+}
+function ctxHtml(c) {
+  if (!c || !c.tokens) return "";
+  const level = c.pct >= 80 ? "hot" : c.pct >= 50 ? "warm" : "ok";
+  return `<span class="ctx ${level}" title="Context: ${c.tokens} of ${c.window} tokens"><span class="bar"><span style="width:${c.pct}%"></span></span>${count(c.tokens)} ${c.pct}%</span>`;
+}
+const money = usd => !usd ? "" : "$" + (usd < 10 ? usd.toFixed(2) : usd < 100 ? usd.toFixed(1) : usd.toFixed(0));
+const costHtml = t => t.cost ? `<span class="tok" title="What Claude Code prices this task at, at API rates">${money(t.cost)}</span>` : "";
+const total = t => { const k = t.tokens || {}; return (k.in || 0) + (k.out || 0) + (k.cache_read || 0) + (k.cache_write || 0); };
+function sorted(list) {
+  if (sortBy === "cost") return list.slice().sort((a, b) => (b.cost || 0) - (a.cost || 0));
+  if (sortBy === "tokens") return list.slice().sort((a, b) => total(b) - total(a));
+  if (sortBy === "ctx") return list.slice().sort((a, b) => ((b.context || {}).tokens || 0) - ((a.context || {}).tokens || 0));
+  return list.slice().sort((a, b) => ORDER.indexOf(a.state) - ORDER.indexOf(b.state) || a.idle - b.idle);
+}
+function renderLimits(limits) {
+  const several = new Set(limits.map(l => l.profile)).size > 1;  // one account needs no name
+  $("#limits").innerHTML = limits.map(l => {
+    const warn = l.limit_in === null || l.limit_in === undefined ? ""
+      : `<span class="limit-warn">${esc(l.profile)} ${l.label} limit ${l.limit_in <= 0 ? "reached" : "in about " + human(l.limit_in)}</span>`;
+    return `<span class="ctx ${l.level}${l.stale ? " stale" : ""}" title="${esc(l.profile)}: ${l.pct}% of the ${l.label} limit used, resets in ${human(l.resets_in)}${l.stale ? " (not updated lately)" : ""}"><span class="who">${several ? esc(l.profile) + " " : ""}${l.label}</span><span class="bar"><span style="width:${l.pct}%"></span></span>${l.pct}%</span>${warn}`;
+  }).join("");
+}
+function clock(at) {
+  const d = new Date(at * 1000), today = new Date().toDateString() === d.toDateString();
+  const hm = d.toTimeString().slice(0, 5);
+  return today ? hm : d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) + " " + hm;
+}
+
+async function api(method, path, data) {
+  const res = await fetch(path, { method, headers: { "Content-Type": "application/json" }, body: data ? JSON.stringify(data) : undefined });
+  const json = await res.json().catch(() => ({}));
+  if (res.status === 401) showPair();
+  if (!res.ok) throw Object.assign(new Error(json.error || `The daemon answered ${res.status}`), { status: res.status });
+  return json;
+}
+
+/* ---------- pairing ---------- */
+
+let pairing = false;
+function showPair() {
+  if (pairing) return;
+  pairing = true;
+  const el = document.createElement("div");
+  el.className = "pair";
+  el.innerHTML = `<form autocomplete="off">
+    <img src="/icon.svg" alt="">
+    <h1>Pair this device</h1>
+    <p>On the computer running headcoach, run <code>hc pair &lt;name&gt;</code>, then type the code it prints.</p>
+    <input name="code" inputmode="text" maxlength="9" placeholder="XXXX-XXXX" autocapitalize="characters" required>
+    <button>Pair</button>
+    <p class="err" role="alert"></p>
+  </form>`;
+  document.body.append(el);
+  const form = el.querySelector("form");
+  form.code.focus();
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    try {
+      await api("POST", "/api/pair", { code: form.code.value });
+      location.reload();
+    } catch (err) { el.querySelector(".err").textContent = err.message; form.code.select(); }
+  });
+}
+let toastTimer = null;
+function toast(msg) {
+  const el = $("#toast"); el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 5000);
+}
+async function act(fn) {
+  try { await fn(); } catch (err) { toast(err.message); }
+  await refresh(true);
+}
+
+/* ---------- board and list ---------- */
+
+function kidsHtml(t, extra) {
+  if (!t.agents || !t.agents.length) return "";
+  return `<div class="kids ${extra}">${t.agents.map(k =>
+    `<div class="kid k-${k.state}"><span class="dot"></span><span class="name">${esc(k.name)}</span>${k.persona ? `<span class="tag persona">${esc(k.persona)}</span>` : ""}<span class="desc">${esc(k.desc)}</span>${tokensHtml(k.tokens)}</div>`).join("")}</div>`;
+}
+function tagsHtml(t) {
+  const refs = t.links.map(l => l.url
+    ? `<a class="tag" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)}</a>`
+    : `<span class="tag mono">${esc(l.label)}</span>`).join("");
+  const persona = t.persona ? `<span class="tag persona">${esc(t.persona)}</span>` : "";
+  const timer = t.timer_left ? `<span class="tag timer" title="Closed by itself when the timer runs out">\u23f1 ${human(t.timer_left)}</span>` : "";
+  return `<div class="tags">${timer}${t.tags.map(x => `<span class="tag t-${esc(x)}">${esc(x)}</span>`).join("")}${persona}${refs}</div>`;
+}
+const closed = t => !t.live && (t.state === "running" || t.state === "needs" || t.state === "review");
+
+// litAt holds when the board saw each task move to Done: it lights up, then fades. A render in the
+// middle of the fade picks it up where it was, through a negative delay.
+const LIT_MS = 3500; // as long as the board in the terminal
+let litAt = {};
+function litAttrs(t) {
+  const at = litAt[t.id];
+  return at && t.state === "done" ? ` data-lit style="--lit: ${at - Date.now()}ms"` : "";
+}
+
+function cardHtml(t) {
+  const body = t.state === "needs" && t.ask ? `<div class="ask">${esc(t.ask)}</div>` : `<div class="last">${esc(t.last)}</div>`;
+  return `<div class="card s-${t.state}"${litAttrs(t)} draggable="true" tabindex="0" role="button" data-id="${t.id}">
+    <div class="title"><span>${esc(t.title)}</span>${closed(t) ? `<span class="chip closed">closed</span>` : ""}</div>
+    <div class="meta mono"><span>${t.short}</span><span>${esc(t.repo)}</span><span title="Since the task started">${human(t.age)}</span><span class="idle" title="Since the last activity">idle ${human(t.idle)}</span>${ctxHtml(t.context)}${tokensHtml(t.tokens)}${costHtml(t)}</div>
+    ${tagsHtml(t)}
+    ${body}
+    ${kidsHtml(t, "")}
+  </div>`;
+}
+
+function listHtml() {
+  const rows = sorted(tasks).map(t => {
+    const kids = t.agents.map((k, i, all) =>
+      `<tr class="child s-${k.state}"${litAttrs(t)} data-id="${t.id}"><td></td><td><span class="st"><span class="dot"></span>${stateName(k.state)}</span></td><td></td><td>${k.persona ? `<span class="tag persona">${esc(k.persona)}</span>` : ""}</td><td>${human(k.age)}</td><td></td><td></td><td>${tokensHtml(k.tokens)}</td><td></td><td>${i === all.length - 1 ? "└─" : "├─"} ${esc(k.name)}</td><td class="lastcol">${esc(k.desc)}</td></tr>`).join("");
+    const last = t.state === "needs" && t.ask ? t.ask : t.last;
+    return `<tr class="s-${t.state}"${litAttrs(t)} data-id="${t.id}" tabindex="0"><td>${t.short}</td><td><span class="st"><span class="dot"></span>${esc(t.state_name)}</span></td><td>${esc(t.repo)}</td><td>${tagsHtml(t)}</td><td>${human(t.age)}</td><td>${human(t.idle)}</td><td>${ctxHtml(t.context)}</td><td>${tokensHtml(t.tokens)}</td><td>${costHtml(t)}</td><td class="task">${esc(t.title)}${closed(t) ? ` <span class="chip closed">closed</span>` : ""}</td><td class="lastcol">${esc(last)}</td></tr>${kids}`;
+  }).join("");
+  return `<table><thead><tr><th>Task</th><th>State</th><th>Repo</th><th>Tags</th><th>Age</th><th>Idle</th><th>Context</th><th>Tokens</th><th>Cost</th><th>Title</th><th>Last</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderBoard() {
+  const n = tasks.filter(t => t.state === "needs").length;
+  $("#attn").textContent = n ? `${n} waiting for you` : "";
+  const sum = { in: 0, out: 0, cache_read: 0, cache_write: 0 };
+  for (const t of tasks) for (const k in sum) sum[k] += (t.tokens || {})[k] || 0;
+  $("#usage").innerHTML = tokensHtml(sum);
+  document.title = (n ? `(${n}) ` : "") + "headcoach";
+  document.querySelectorAll("[data-view]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.view === view)));
+  $("#sortby").value = sortBy;
+  const el = $("#board");
+  if (loaded && !tasks.length) {
+    el.className = "";
+    el.innerHTML = `<div class="blank"><b>No tasks yet.</b><br>Start a Claude Code session in tmux and send it a prompt: it shows up here as a task.
+      You can also add one with New task, or from a shell with <code>hc new "fix the flaky test"</code>.</div>`;
+    return;
+  }
+  el.className = view === "list" ? "list" : "board";
+  if (view === "list") { el.innerHTML = listHtml(); return; }
+  el.innerHTML = STATES.map(s => {
+    const list = (sortBy === "state" ? tasks : sorted(tasks)).filter(t => t.state === s.id);
+    return `<section class="col s-${s.id}" data-state="${s.id}">
+      <div class="col-head"><span class="dot"></span><h2>${s.name}</h2><span class="n">${list.length}</span></div>
+      <div class="cards">${list.map(cardHtml).join("") || `<div class="empty">Nothing here</div>`}</div>
+    </section>`;
+  }).join("");
+}
+
+/* ---------- drawer ---------- */
+
+function drawerShell() {
+  $("#overlay").innerHTML = `<div class="scrim" id="scrim"></div>
+  <aside class="drawer" role="dialog" aria-label="Task">
+    <div class="d-head" id="d-head"></div>
+    <div class="d-body" id="d-body"></div>
+    <form class="reply" id="reply">
+      <textarea id="msg" placeholder="Message the agent" aria-label="Message the agent"></textarea>
+      <div class="row"><span class="hint" id="hint"></span><button class="btn primary" type="submit" id="send">Send</button></div>
+    </form>
+  </aside>`;
+}
+
+function renderDrawer() {
+  const t = detail;
+  if (!t) { $("#overlay").innerHTML = ""; return; }
+  if (!$("#d-body")) drawerShell();
+  const body = $("#d-body");
+  const atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 40;
+  if (!editingTitle) {
+    $("#d-head").innerHTML = `<h2 id="d-title" title="Double-click to rename">${esc(t.title)}</h2><button class="btn small" type="button" id="close">Close</button>`;
+  }
+  const trail = t.history.map(h => `<span><b>${stateName(h.state)}</b> ${clock(h.at)}</span>`).join("<span>&rarr;</span>");
+  const names = { you: "You", agent: "Agent", tool: "Tool" };
+  // Your last prompt stays first in a log it is too old for: the gap says how much was left out.
+  const gap = x => x.skipped ? `<div class="gap">… ${x.skipped} turn${x.skipped === 1 ? "" : "s"} …</div>` : "";
+  let log = t.log.map(x => (x.html
+    ? `<div class="turn ${x.who} md"><div class="who">${names[x.who]}</div>${x.html}</div>`
+    : `<div class="turn ${x.who}"><div class="who">${names[x.who]}</div>${esc(x.text)}</div>`) + gap(x)).join("");
+  if (t.state === "needs" && t.ask) log += `<div class="turn ask"><div class="who">Needs you</div>${esc(t.ask)}</div>`;
+  if (!log) log = `<div class="empty">${t.session_id ? "Nothing in the session yet." : "No session yet. Start the task to open one."}</div>`;
+  const never = !t.session_id;
+  const inBoard = t.attach && t.attach.length > 0;  // live in the board's own tmux: entered from a terminal
+  const termLabel = t.live ? "Go to terminal" : never ? "Start in tmux" : "Resume in tmux";
+  body.innerHTML = `
+    <dl class="kv">
+      <dt>Task</dt><dd class="mono">${t.id}</dd>
+      ${t.session_id && t.session_id !== t.id ? `<dt>Session</dt><dd class="mono">${t.session_id}</dd>` : ""}
+      <dt>Repo</dt><dd>${esc(t.repo || "none")}</dd>
+      <dt>Branch</dt><dd class="mono">${esc(t.branch || "none")}</dd>
+      <dt>Directory</dt><dd class="mono">${esc(t.cwd || "none")}</dd>
+      <dt>Tags</dt><dd>${tagsHtml(t)}</dd>
+      <dt>Context</dt><dd>${ctxHtml(t.context) || "none yet"}</dd>
+      <dt>Cost</dt><dd>${costHtml(t) ? costHtml(t) + ` <span class="tok">at API prices</span>` : "not reported"}</dd>
+      <dt>Tokens</dt><dd>${tokensHtml(t.tokens) || "none yet"}${tokensHtml(t.agent_tokens) ? ` <span class="tok">(sub-agents: </span>${tokensHtml(t.agent_tokens)}<span class="tok">)</span>` : ""}</dd>
+      <dt>Terminal</dt><dd>${inBoard ? "live in the board's tmux" : t.live ? `live in tmux pane <span class="mono">${esc(t.pane)}</span>` : never ? "not started" : "closed"}</dd>
+    </dl>
+    <div>
+      <div class="label">State</div>
+      <div class="trail">${trail}</div>
+      <div class="moverow"><label for="moveto">Move to</label>
+        <select id="moveto">${STATES.map(s => `<option value="${s.id}"${s.id === t.state ? " selected" : ""}>${s.name}</option>`).join("")}</select>
+        ${inBoard ? "" : `<button class="btn small" type="button" id="term">${termLabel}</button>`}
+        <button class="btn small danger" type="button" id="del">${confirmDelete ? "Confirm delete" : "Delete"}</button>
+      </div>
+    </div>
+    ${t.agents.length ? `<div><div class="label">Sub-agents and background jobs</div>${kidsHtml(t, "plain")}</div>` : ""}
+    <div>
+      <div class="label">Open in a terminal</div>
+      <div class="cmd"><code id="cmdtext">${esc(inBoard ? "hc attach " + t.short : t.resume)}</code><button class="btn small" type="button" id="copy">Copy</button></div>
+    </div>
+    <div><div class="label">Session</div><div class="log">${log}</div></div>
+    ${t.screen ? `<div><div class="label">Terminal, waiting for an answer</div><pre class="screen" id="screen">${esc(t.screen)}</pre>
+      <div class="keys">${[["Up", "\u2191"], ["Down", "\u2193"], ["Enter", "Enter"], ["Escape", "Esc"], ["Tab", "Tab"], ["1", "1"], ["2", "2"], ["3", "3"], ["y", "y"], ["n", "n"]]
+        .map(([k, label]) => `<button class="btn small" type="button" data-key="${k}">${label}</button>`).join("")}
+        <span class="sep">Each button presses that key in the session.</span></div></div>` : ""}`;
+  body.querySelectorAll(".md a").forEach(a => { a.target = "_blank"; a.rel = "noopener"; });
+  if (atBottom) body.scrollTop = body.scrollHeight;
+  $("#msg").disabled = $("#send").disabled = t.ask_kind === "permission" && !t.can_reply;
+  $("#hint").textContent = t.ask_kind === "permission" && !t.can_reply ? "The session is asking for a permission. Answer it with the keys above."
+    : !t.can_reply ? "The session is showing a dialog. Answer it with the keys above, or type an answer: it goes in the free text option, if the dialog has one."
+    : t.live && t.state === "running" ? "The agent is working. Your message is queued behind the current turn."
+    : t.live ? "Your message goes straight to the session."
+    : never ? "Sending a message starts the session with it."
+    : "The session is closed. Sending a message resumes it in a new tmux window.";
+}
+
+/* ---------- data ---------- */
+
+async function refresh(force) {
+  try {
+    const data = await api("GET", "/api/tasks");
+    $("#conn").classList.remove("down"); $("#conn-text").textContent = "live";
+    loaded = true;
+    const sig = JSON.stringify(data.tasks.map(t => [t.id, t.state, t.title, t.last, t.ask, t.live, t.repo, t.agents, t.tags, t.links, t.persona, t.tokens, t.context, t.cost, Math.floor(t.age / 60), Math.floor(t.idle / 60), t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]));
+    const was = new Map(tasks.map(t => [t.id, t.state])), now = Date.now();
+    for (const id in litAt) if (now - litAt[id] >= LIT_MS) delete litAt[id];
+    for (const t of data.tasks) if (was.has(t.id) && was.get(t.id) !== "done" && t.state === "done") litAt[t.id] = now;
+    tasks = data.tasks;
+    renderLimits(data.limits || []);
+    if ((sig !== boardSig || force) && !dragId) { boardSig = sig; renderBoard(); }
+  } catch (err) {
+    $("#conn").classList.add("down"); $("#conn-text").textContent = "daemon not reachable";
+  }
+  if (openId) {
+    try {
+      const t = await api("GET", "/api/tasks/" + openId);
+      const sig = JSON.stringify([t.state, t.title, t.ask, t.live, t.persona, t.pane, t.attach, t.branch, t.agents, t.tokens, t.context, t.cost, t.history.length, t.log.length, t.log.slice(-1), t.resume, t.screen, confirmDelete, t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]);
+      detail = t;
+      if (sig !== detailSig || force) { detailSig = sig; renderDrawer(); }
+    } catch (err) { closeDrawer(); }
+  }
+}
+function openDrawer(id) { openId = id; detail = null; detailSig = ""; confirmDelete = false; editingTitle = false; $("#overlay").innerHTML = ""; refresh(true); }
+function closeDrawer() { openId = null; detail = null; $("#overlay").innerHTML = ""; }
+
+/* ---------- events ---------- */
+
+document.addEventListener("click", e => {
+  const t = e.target;
+  if (t.dataset.view) {
+    view = t.dataset.view;
+    try { localStorage.setItem("view", view); } catch (err) {}
+    renderBoard(); return;
+  }
+  if (t.closest("a")) return;
+  const card = t.closest(".card, tr[data-id]");
+  if (card) { openDrawer(card.dataset.id); return; }
+  if (t.id === "newbtn") { $("#newpanel").hidden = !$("#newpanel").hidden; if (!$("#newpanel").hidden) $("#new-prompt").focus(); return; }
+  if (t.id === "newcancel") { $("#newpanel").hidden = true; return; }
+  if (t.id === "close" || t.id === "scrim") { closeDrawer(); return; }
+  if (t.dataset.key) { act(() => api("POST", `/api/tasks/${openId}/keys`, { keys: [t.dataset.key] })); return; }
+  if (t.id === "term") { act(() => api("POST", `/api/tasks/${openId}/focus`)); return; }
+  if (t.id === "del") {
+    if (!confirmDelete) { confirmDelete = true; renderDrawer(); return; }
+    const id = openId; closeDrawer(); act(() => api("DELETE", `/api/tasks/${id}`)); return;
+  }
+  if (t.id === "copy") {
+    const text = $("#cmdtext").textContent;
+    const fallback = () => { const r = document.createRange(); r.selectNodeContents($("#cmdtext")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+    try { navigator.clipboard.writeText(text).then(() => { t.textContent = "Copied"; }, fallback); } catch (err) { fallback(); }
+  }
+});
+document.addEventListener("dblclick", e => {
+  if (e.target.id !== "d-title" || !detail) return;
+  editingTitle = true;
+  $("#d-head").innerHTML = `<input id="d-title-input" value="${esc(detail.title)}" aria-label="Task title"><button class="btn small" type="button" id="close">Close</button>`;
+  const input = $("#d-title-input"); input.focus(); input.select();
+});
+function commitTitle() {
+  const input = $("#d-title-input");
+  if (!input) return;
+  const title = input.value.trim();
+  editingTitle = false;
+  if (title && detail && title !== detail.title) act(() => api("PATCH", `/api/tasks/${openId}`, { title }));
+  else renderDrawer();
+}
+document.addEventListener("focusout", e => { if (e.target.id === "d-title-input") commitTitle(); });
+document.addEventListener("keydown", e => {
+  if (e.target.id === "d-title-input") {
+    if (e.key === "Enter") { e.preventDefault(); commitTitle(); }
+    if (e.key === "Escape") { e.stopPropagation(); editingTitle = false; renderDrawer(); }
+    return;
+  }
+  if (e.key === "Escape") { if (openId) closeDrawer(); else $("#newpanel").hidden = true; }
+  if (e.key === "Enter" && e.target.matches && e.target.matches(".card, tr[data-id]")) openDrawer(e.target.dataset.id);
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && e.target.id === "msg") $("#reply").requestSubmit();
+});
+document.addEventListener("submit", e => {
+  e.preventDefault();
+  if (e.target.id === "reply") {
+    const text = $("#msg").value.trim();
+    if (!text) return;
+    act(async () => { await api("POST", `/api/tasks/${openId}/reply`, { text }); $("#msg").value = ""; });
+  }
+  if (e.target.id === "newpanel") {
+    const start = !!(e.submitter && e.submitter.dataset.start);
+    const data = { prompt: $("#new-prompt").value, cwd: $("#new-dir").value, profile: $("#new-profile").value, start };
+    act(async () => { await api("POST", "/api/tasks", data); $("#new-prompt").value = ""; $("#newpanel").hidden = true; });
+  }
+});
+document.addEventListener("change", e => {
+  if (e.target.id === "sortby") {
+    sortBy = e.target.value;
+    try { localStorage.setItem("sort", sortBy); } catch (err) {}
+    renderBoard(); return;
+  }
+  if (e.target.id === "moveto") act(() => api("PATCH", `/api/tasks/${openId}`, { state: e.target.value }));
+});
+document.addEventListener("dragstart", e => {
+  const card = e.target.closest && e.target.closest(".card");
+  if (!card) return;
+  dragId = card.dataset.id; card.classList.add("dragging");
+  e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", dragId);
+});
+document.addEventListener("dragend", () => { dragId = null; renderBoard(); });
+document.addEventListener("dragover", e => {
+  const col = e.target.closest && e.target.closest(".col");
+  if (!col || !dragId) return;
+  e.preventDefault();
+  document.querySelectorAll(".col.over").forEach(c => c !== col && c.classList.remove("over"));
+  col.classList.add("over");
+});
+document.addEventListener("drop", e => {
+  const col = e.target.closest && e.target.closest(".col");
+  if (!col || !dragId) return;
+  e.preventDefault();
+  const id = dragId, state = col.dataset.state;
+  dragId = null;
+  const t = tasks.find(x => x.id === id);
+  if (t && t.state !== state) act(() => api("PATCH", `/api/tasks/${id}`, { state }));
+  else renderBoard();
+});
+
+async function boot() {
+  renderBoard();
+  try {
+    const meta = await api("GET", "/api/meta");
+    $("#new-profile").innerHTML = meta.profiles.map(p => `<option>${esc(p)}</option>`).join("");
+    $("#dirs").innerHTML = meta.dirs.map(d => `<option value="${esc(d)}"></option>`).join("");
+  } catch (err) { if (err.status === 401) return; }
+  await refresh(true);
+  setInterval(() => { if (!document.hidden) refresh(false); }, POLL_MS);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(false); });
+}
+boot();
+</script>
+</body>
+</html>

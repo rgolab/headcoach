@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in headcoach does not work as it should
+labels: [bug]
+body:
+  - type: checkboxes
+    attributes:
+      label: Before you send it
+      options:
+        - label: I run the latest release, or the bug is still in it
+          required: true
+        - label: I searched the open and closed issues
+          required: true
+  - type: textarea
+    attributes:
+      label: What happened
+      description: What you saw. Paste the error, or a screenshot of the board.
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: How to reproduce it
+      description: The steps, from a fresh board if you can.
+      placeholder: |
+        1. hc new -C demo "say hi" --start
+        2. press a on the task
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Daemon log
+      description: "The last lines of `~/.local/state/headcoach/daemon.log`, if they say something about it."
+      render: text
+  - type: input
+    attributes:
+      label: headcoach version
+      description: The output of `hc --version`
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: Claude Code version
+      description: The output of `claude --version`
+    validations:
+      required: true
+  - type: input
+    attributes:
+      label: OS and tmux
+      description: For example macOS 15.5, tmux 3.5a
+    validations:
+      required: true
