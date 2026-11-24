@@ -216,6 +216,38 @@ func Who(t transcript.Turn) string {
 	return "tool"
 }
 
+// HandoffLines sum up a task's handoff in a few lines: where it is, how old it is, then what it says.
+func HandoffLines(h api.Handoff, now time.Time) []string {
+	age := Human(max(0, int(float64(now.UnixNano())/1e9-h.UpdatedAt)))
+	out := []string{fmt.Sprintf("handoff  %s, written %s ago", h.Path, age)}
+	add := func(label, text string) { out = append(out, fmt.Sprintf("  %-9s%s", label, text)) }
+	sum := h.Summary
+	if sum.Status != "" {
+		add("status", sum.Status)
+	}
+	if len(sum.Running) > 0 {
+		add("running", strings.Join(sum.Running, "; "))
+	}
+	for _, w := range sum.Waiting {
+		on := w.On
+		if on == "" {
+			on = "someone"
+		}
+		add("waits", "on "+on+": "+w.What)
+	}
+	if len(sum.Next) > 0 {
+		add("next", strings.Join(sum.Next, "; "))
+	}
+	if q := sum.Queue; q.Open+q.Done > 0 {
+		queue := fmt.Sprintf("%d open, %d done", q.Open, q.Done)
+		if q.Next != "" {
+			queue += ", next: " + q.Next
+		}
+		add("queue", queue)
+	}
+	return out
+}
+
 // ContextLevel tells how full the context window is: empty, ok, warm or hot. The colours of the gauge
 // hang on this.
 func ContextLevel(c api.Context) string {

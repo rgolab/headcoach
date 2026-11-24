@@ -23,6 +23,7 @@ import (
 	"github.com/humblebundledore/headcoach/internal/api"
 	"github.com/humblebundledore/headcoach/internal/client"
 	"github.com/humblebundledore/headcoach/internal/format"
+	"github.com/humblebundledore/headcoach/internal/handoff"
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/store"
@@ -97,7 +98,9 @@ func newDaemon(t *testing.T) *daemon {
 			out := task("made0001", "backlog", 0)
 			out.Pane = "%7"
 			out.Detail = &api.Detail{Log: []transcript.Turn{{Who: "you", Text: "hello", Skipped: 3}, {Who: "tool", Text: "$ ls"},
-				{Who: "you", Text: "[from coordinator 1a2b3c4d] stop", From: "coordinator 1a2b3c4d"}}}
+				{Who: "you", Text: "[from coordinator 1a2b3c4d] stop", From: "coordinator 1a2b3c4d"}},
+				Handoff: &api.Handoff{Path: "/state/handoff/made0001.md", Text: "## Status\nHalfway.",
+					Summary: handoff.Summary{Status: "Halfway.", Queue: handoff.Queue{Open: 1, Next: "docs"}}}}
 			json.NewEncoder(w).Encode(out)
 		}
 	}))
@@ -1337,9 +1340,11 @@ func TestDetailQuestionAndHelp(t *testing.T) {
 	m = run(t, m, cmd)
 	m.detailID = "made0001" // the stand-in daemon answers with this task whatever is asked
 	m = run(t, m, m.loadDetail())
+	m = send(t, m, tea.WindowSizeMsg{Width: 200, Height: 60}) // tall enough for the whole detail
 	for _, piece := range []string{
 		"title made0001", "  state    Backlog", "Session log", "  you   | hello", "        | … 3 turns …", "  tool  | $ ls",
 		"  coord | [from coordinator 1a2b3c4d] stop", "escape or q back",
+		"Handoff", "  /state/handoff/made0001.md, written ", "    status   Halfway.", "    queue    1 open, 0 done, next: docs",
 	} {
 		if !strings.Contains(m.View(), piece) {
 			t.Errorf("the detail lacks %q:\n%s", piece, m.View())

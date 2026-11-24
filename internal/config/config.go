@@ -239,6 +239,11 @@ func (c *Config) TmuxConf() string { return filepath.Join(filepath.Dir(c.DB), "t
 // SessionsDir holds one small file per Claude session id, with the short task id. The status line reads it.
 func (c *Config) SessionsDir() string { return filepath.Join(filepath.Dir(c.DB), "sessions") }
 
+// HandoffPath is where a task's handoff file lives, next to the board's database: never in a checkout.
+func (c *Config) HandoffPath(taskID string) string {
+	return filepath.Join(filepath.Dir(c.DB), "handoff", taskID+".md")
+}
+
 // HasProfile tells whether a profile of that name is configured.
 func (c *Config) HasProfile(name string) bool {
 	for _, p := range c.Profiles {

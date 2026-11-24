@@ -281,6 +281,41 @@ func TestInbox(t *testing.T) {
 	}
 }
 
+// hc handoff prints a task's handoff, init writes the template, path says where it goes; show sums it up.
+func TestHandoff(t *testing.T) {
+	f := newFixture(t)
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "fix it"})
+	path := strings.TrimSpace(f.ok("handoff", "path", "abcd"))
+	if !strings.HasSuffix(path, "/handoff/abcd1234-s1.md") {
+		t.Errorf("path = %q", path)
+	}
+	if out := f.ok("handoff", "abcd"); !strings.HasPrefix(out, "No handoff yet. Write one at "+path) {
+		t.Errorf("no handoff: %q", out)
+	}
+	if out := f.ok("handoff", "init", "abcd"); out != path+"\n" {
+		t.Errorf("init printed %q", out)
+	}
+	os.WriteFile(path, []byte("# Handoff\n## Status\nHalfway.\n## Waiting\n- on you: a go\n"), 0o644)
+	if out := f.ok("handoff", "abcd"); out != "# Handoff\n## Status\nHalfway.\n## Waiting\n- on you: a go\n" {
+		t.Errorf("handoff = %q", out)
+	}
+	out := f.ok("show", "abcd")
+	for _, piece := range []string{"\n  handoff  " + path + ", written ", "\n    status   Halfway.\n    waits    on you: a go\n"} {
+		if !strings.Contains(out, piece) {
+			t.Errorf("show lacks %q:\n%s", piece, out)
+		}
+	}
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "abcd1234-s1")
+	if got := strings.TrimSpace(f.ok("handoff", "path")); got != path {
+		t.Errorf("path from the task's session = %q", got)
+	}
+	// A reset between two turns needs the prompt on screen; the stand-in tmux shows none.
+	f.hook("Stop", "abcd1234-s1", "%1", map[string]any{"last_assistant_message": "Done."})
+	if code, _, errOut := f.hc("reset", "abcd"); code == 0 || !strings.Contains(errOut, "prompt is not empty") {
+		t.Errorf("reset: %d %s", code, errOut)
+	}
+}
+
 func TestShow(t *testing.T) {
 	f := newFixture(t)
 	transcript := filepath.Join(f.tmp, "s1.jsonl")

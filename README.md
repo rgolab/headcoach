@@ -109,6 +109,7 @@ Then:
 - `hc new --model sonnet --effort low "<prompt>"` picks the model and the effort level, see [Model and effort](#model-and-effort)
 - `hc new --parent <id> "<prompt>"`, `hc link <id> <parent>` and `hc unlink <id>` put a task under the one that drives it, see [Coordinators](#coordinators)
 - `hc inbox [<id>]` lists what a task heard from the tasks it drives
+- `hc handoff [init | path] [<id>]` prints a task's handoff file, `hc reset <id>` starts it again from there
 - `hc move <id> <state>` moves a session, the state as the board shows it, `Running` or `Needs me`, and `Parked` closes it
 - `hc adopt <id>` moves a session from your tmux into the board's
 - `hc limits` shows each limit and when it resets
@@ -206,6 +207,13 @@ Then:
 - it types into a parent once a minute at most, all its children's news in one message, and never opens a session for it
 - `hc inbox [<task>]` lists what a task heard and what waits to be said, the calling task by default
 - the history of a task names the task that moved it: `by task 1a2b3c4d`
+- each task can keep a handoff file: where the work stands, written so that a fresh context, or the task driving it, can pick it up
+- it lives next to the board's database, never in the checkout: `hc handoff path` prints where, and a session the board starts finds it in `HC_HANDOFF`
+- `hc handoff init` writes a template, `hc handoff [<task>]` prints it, the calling task by default; the agent keeps it up to date with its own tools
+- its sections, each optional: `## Status`, `## Running`, `## Waiting` with one `- on <who>: <what>` line each, `## Next`, and a `## Queue` of `- [ ]` and `- [x]` items
+- `<who>` is `you`, a task id, or anything else such as `ci`; HTML comments are guidance and never count
+- `hc show`, the detail and the web board sum it up: its status, what waits on whom, what is next, and the queue
+- `hc reset <task>` clears a task's context between two turns, then points the fresh one at its handoff; it refuses while the task works, and without a handoff that says something
 - `hc reply` from inside a session puts its sender before the message: `[from task 1a2b3c4d] stop`, so the other session never takes it for your words
 - `hc new` from inside a session does the same to the task's first prompt
 - a slash command keeps its place and the label goes before its arguments; a bare one such as `/compact` has none
@@ -287,6 +295,7 @@ Then:
 - `internal/store`: the SQLite storage
 - `internal/review`: what the review queue reads from transcripts, git and the forge
 - `internal/schedule`: when a schedule runs next
+- `internal/handoff`: what the board reads from a task's handoff file
 - `internal/usage` and `internal/limits`: tokens, cost and the usage limits
 - `internal/api` and `internal/client`: the JSON shapes of the API, and its client
 - `internal/server`: the daemon, its JSON API and the web board

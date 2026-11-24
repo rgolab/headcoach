@@ -116,6 +116,8 @@ func init() {
 		}},
 		{name: "link", args: task + " <parent>", help: "put a task under the one that drives it; self is the task of the session hc runs in", min: 2, max: 2, run: cmdLink},
 		{name: "unlink", args: task, help: "take a task from under its parent", min: 1, max: 1, run: cmdUnlink},
+		{name: "handoff", args: "[init | path] [" + task + "]", help: "print a task's handoff file; init writes the template, path prints where it goes (default: self)", max: 2, run: cmdHandoff, flags: []flag{jsonFlag}},
+		{name: "reset", args: task, help: "clear a task's context between two turns, and point the fresh one at its handoff", min: 1, max: 1, run: cmdReset},
 		{name: "inbox", args: "[" + task + "]", help: "what a task heard from the tasks it drives, and what waits to be said (default: self)", max: 1, run: cmdInbox, flags: []flag{jsonFlag}},
 		{name: "review", help: "list the tasks in Review, the one waiting longest first, with their change", run: cmdReview, flags: []flag{jsonFlag}},
 		{name: "start", args: task, help: "start or resume a task in a new tmux window", min: 1, max: 1, run: cmdStart},
@@ -448,6 +450,12 @@ func cmdShow(e *env, p parsed) error {
 	if t.State == "needs" {
 		e.printf("\n  needs you: %s\n", t.Ask)
 	}
+	if t.Detail != nil && t.Handoff != nil && t.Handoff.Text != "" {
+		e.printf("\n")
+		for _, line := range format.HandoffLines(*t.Handoff, time.Now()) {
+			e.printf("  %s\n", line)
+		}
+	}
 	for _, a := range t.Agents {
 		kind := "sub-agent"
 		if a.Name == "command" || a.Name == "monitor" {
@@ -696,6 +704,53 @@ func cmdInbox(e *env, p parsed) error {
 		}
 		e.printf("%-7s %5s  %-8s  %s: %s\n", status, format.Human(int(now-at)), it.ChildShort, cut(title, 40), it.News)
 	}
+	return nil
+}
+
+func cmdHandoff(e *env, p parsed) error {
+	action, args := "", p.args
+	if len(args) > 0 && (args[0] == "init" || args[0] == "path") {
+		action, args = args[0], args[1:]
+	}
+	if len(args) > 1 {
+		return usageError{"hc handoff [init | path] [<task>]"}
+	}
+	id := "self"
+	if len(args) > 0 {
+		id = args[0]
+	}
+	var (
+		h    api.Handoff
+		err  error
+		path = "/api/tasks/" + id + "/handoff"
+	)
+	if action == "init" {
+		err = e.client.Call("POST", path, map[string]bool{"init": true}, &h)
+	} else {
+		err = e.client.Call("GET", path, nil, &h)
+	}
+	if err != nil {
+		return err
+	}
+	switch {
+	case p.has("json"):
+		return e.json(h)
+	case action != "":
+		e.printf("%s\n", h.Path)
+	case h.Text == "":
+		e.printf("No handoff yet. Write one at %s, or start from the template: hc handoff init %s\n", h.Path, id)
+	default:
+		e.printf("%s\n", strings.TrimRight(h.Text, "\n"))
+	}
+	return nil
+}
+
+func cmdReset(e *env, p parsed) error {
+	var t api.Task
+	if err := e.client.CallFor(30*time.Second, "POST", "/api/tasks/"+p.args[0]+"/reset", nil, &t); err != nil {
+		return err
+	}
+	e.printf("%s  cleared, and pointed at its handoff\n", t.Short)
 	return nil
 }
 

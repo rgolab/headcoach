@@ -585,6 +585,7 @@ function renderDrawer() {
       </div>
     </div>
     ${t.agents.length ? `<div><div class="label">Sub-agents and background jobs</div>${kidsHtml(t, "plain")}</div>` : ""}
+    ${t.handoff && t.handoff.text ? `<div><div class="label">Handoff <span class="tok mono">${esc(t.handoff.path)}, written ${human(Math.max(0, Math.round(Date.now() / 1000 - t.handoff.updated_at)))} ago</span></div><div class="turn md handoff">${t.handoff.html}</div></div>` : ""}
     <div>
       <div class="label">Open in a terminal</div>
       <div class="cmd"><code id="cmdtext">${esc(inBoard ? "hc attach " + t.short : t.resume)}</code><button class="btn small" type="button" id="copy">Copy</button></div>
@@ -625,7 +626,7 @@ async function refresh(force) {
   if (openId) {
     try {
       const t = await api("GET", "/api/tasks/" + openId);
-      const sig = JSON.stringify([t.state, t.title, t.ask, t.live, t.persona, t.pane, t.attach, t.branch, t.agents, t.tokens, t.context, t.cost, t.history.length, t.log.length, t.log.slice(-1), t.resume, t.screen, confirmDelete, t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]);
+      const sig = JSON.stringify([t.state, t.title, t.ask, t.live, t.persona, t.pane, t.attach, t.branch, t.agents, t.handoff && t.handoff.updated_at, t.tokens, t.context, t.cost, t.history.length, t.log.length, t.log.slice(-1), t.resume, t.screen, confirmDelete, t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]);
       detail = t;
       if (sig !== detailSig || force) { detailSig = sig; renderDrawer(); }
     } catch (err) { closeDrawer(); }

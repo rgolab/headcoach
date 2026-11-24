@@ -145,7 +145,7 @@ func TestCreateTaskWithStart(t *testing.T) {
 	eq(t, len(f.tmux.windows), 1)
 	win := f.tmux.windows[0]
 	eq(t, shellWords(t, win.Command), []string{"claude-team", "--session-id", id, "--", "do the thing"})
-	eq(t, win.Env, []string{"HC_TASK=" + id, "HC_URL=http://127.0.0.1:7337"})
+	eq(t, win.Env, []string{"HC_TASK=" + id, "HC_URL=http://127.0.0.1:7337", "HC_HANDOFF=" + f.cfg.HandoffPath(id)})
 	eq(t, []string{win.Cwd, win.Name, win.Session}, []string{f.tmp, id[:8] + "-do-the-thing", "main"})
 	eq(t, f.history(id), []string{"backlog you", "running you"})
 	short, _ := os.ReadFile(filepath.Join(f.cfg.SessionsDir(), id))
@@ -851,7 +851,7 @@ func TestStartOpensASessionInTheBoardServer(t *testing.T) {
 	eq(t, len(f.tmux.sessions), 1)
 	sess := f.tmux.sessions[0]
 	eq(t, []string{sess.Socket, sess.Conf, sess.Name}, []string{socket, filepath.Join(f.tmp, "state", "tmux.conf"), id[:8] + "-do-the-thing"})
-	eq(t, sess.Env, []string{"HC_TASK=" + id, "HC_URL=http://127.0.0.1:7337"})
+	eq(t, sess.Env, []string{"HC_TASK=" + id, "HC_URL=http://127.0.0.1:7337", "HC_HANDOFF=" + f.cfg.HandoffPath(id)})
 	eq(t, []any{task.data["live"], task.data["state"]}, []any{true, "running"})
 	var attach []any
 	for _, word := range tmux.AttachCommand("%0", socket) {

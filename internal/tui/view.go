@@ -837,6 +837,16 @@ func describe(t *api.Task) []cell {
 	if detail == nil {
 		detail = &api.Detail{}
 	}
+	if h := detail.Handoff; h != nil && h.Text != "" {
+		add("\nHandoff\n", bold)
+		for i, line := range format.HandoffLines(*h, time.Now()) {
+			style := plain
+			if i == 0 {
+				line, style = strings.TrimPrefix(line, "handoff  "), dim
+			}
+			add("  "+line+"\n", style)
+		}
+	}
 	add("\nHistory\n", bold)
 	for _, move := range detail.History {
 		add("  "+time.Unix(int64(move.At), 0).Format("2006-01-02 15:04:05")+"  ", dim)

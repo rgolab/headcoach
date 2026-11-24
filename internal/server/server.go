@@ -103,6 +103,8 @@ type Server struct {
 	// PRState asks the forge about a pull or merge request. Tests replace it.
 	PRState     func(url string) review.PR
 	attachCheck time.Duration
+	// clearWait is how long a reset waits for the cleared session to come back before it briefs it.
+	clearWait time.Duration
 
 	mu            sync.Mutex
 	lastReconcile float64
@@ -113,7 +115,7 @@ type Server struct {
 func New(cfg *config.Config, st *store.Store, tm Tmux) *Server {
 	return &Server{cfg: cfg, st: st, board: board.New(st, cfg), tmux: tm, Ask: ask.Run, Log: transcript.Log,
 		AttachProcess: attachProcess, attachCheck: attachCheck, Inspect: review.InspectCached,
-		PRState: review.StateOf}
+		PRState: review.StateOf, clearWait: 15 * time.Second}
 }
 
 // httpError is an error with the status the client should get.
@@ -168,6 +170,13 @@ func (s *Server) Handler() http.Handler {
 	locked("POST /api/tasks/{id}/start", s.startTask)
 	locked("POST /api/tasks/{id}/reply", s.reply)
 	locked("GET /api/tasks/{id}/inbox", s.inbox)
+	locked("GET /api/tasks/{id}/handoff", s.getHandoff)
+	locked("POST /api/tasks/{id}/handoff", s.initHandoff)
+	// A reset waits for the cleared session to come back: it locks only while it reads or types.
+	mux.HandleFunc("POST /api/tasks/{id}/reset", func(w http.ResponseWriter, r *http.Request) {
+		value, err := s.reset(r)
+		respond(w, value, err)
+	})
 	locked("GET /api/tasks/{id}/screen", s.screen)
 	locked("POST /api/tasks/{id}/keys", s.keys)
 	locked("POST /api/tasks/{id}/focus", s.focus)
@@ -728,6 +737,7 @@ func (s *Server) view(task *store.Task, detail bool) (*api.Task, error) {
 	if sess != nil && !out.CanReply {
 		d.Screen = s.screenText(sess)
 	}
+	d.Handoff = s.readHandoff(task.ID)
 	return out, nil
 }
 
@@ -769,7 +779,7 @@ func (s *Server) openWindowBy(task *store.Task, prompt, by string) (string, erro
 	}
 	window := tmux.Window{
 		Cwd: cwd, Command: command, Name: board.WindowName(task),
-		Env: []string{"HC_TASK=" + task.ID, "HC_URL=" + s.cfg.URL()},
+		Env: []string{"HC_TASK=" + task.ID, "HC_URL=" + s.cfg.URL(), "HC_HANDOFF=" + s.cfg.HandoffPath(task.ID)},
 	}
 	var pane string
 	if s.cfg.PrivateTmux {
@@ -1216,6 +1226,7 @@ func (s *Server) deleteTask(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	_ = os.Remove(s.cfg.HandoffPath(task.ID)) // its handoff goes with it; there may be none
 	return map[string]string{"deleted": task.ID}, s.st.DeleteTask(task.ID)
 }
 

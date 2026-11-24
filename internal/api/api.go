@@ -3,6 +3,7 @@
 package api
 
 import (
+	"github.com/humblebundledore/headcoach/internal/handoff"
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/store"
@@ -47,13 +48,25 @@ type Session struct {
 	StartedAt float64 `json:"started_at"`
 }
 
+// Handoff is a task's handoff file: where the work stands, for a fresh context or the task driving it.
+type Handoff struct {
+	Path string `json:"path"`
+	// Text is the file as it is, empty when there is none; HTML is its Markdown rendered. UpdatedAt is
+	// when it last changed, zero when there is no file.
+	Text      string          `json:"text"`
+	HTML      string          `json:"html"`
+	UpdatedAt float64         `json:"updated_at"`
+	Summary   handoff.Summary `json:"summary"`
+}
+
 // Detail is what only the view of a single task carries.
 type Detail struct {
 	History  []Move            `json:"history"`
 	Sessions []Session         `json:"sessions"`
 	Log      []transcript.Turn `json:"log"`
 	// Screen is what the terminal shows while a dialog is up, so it can be answered from the board.
-	Screen string `json:"screen"`
+	Screen  string   `json:"screen"`
+	Handoff *Handoff `json:"handoff"`
 }
 
 // Task is a task as the board shows it.
