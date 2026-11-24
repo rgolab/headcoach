@@ -775,6 +775,25 @@ func (m *model) folderKey(msg tea.KeyMsg) bool {
 	return true
 }
 
+// filterKey moves the cursor of the table with the arrows while the filter is typed, so a task is
+// picked without leaving the line. It says whether it took the key.
+func (m *model) filterKey(msg tea.KeyMsg) bool {
+	switch msg.Type {
+	case tea.KeyUp:
+		m.cursor--
+	case tea.KeyDown:
+		m.cursor++
+	case tea.KeyPgUp:
+		m.cursor -= m.tableHeight()
+	case tea.KeyPgDown:
+		m.cursor += m.tableHeight()
+	default:
+		return false
+	}
+	m.clamp()
+	return true
+}
+
 // pickFolder puts a folder in the input, then lists what is in it: the next level is one tab away.
 // The list closes when there is nothing below.
 func (m *model) pickFolder(path string) {
@@ -1309,7 +1328,7 @@ func (m *model) planBatch(key, state string) (title, question string, cmd tea.Cm
 
 // typing handles a key while the input line is open.
 func (m model) typing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.asking == "newdir" && m.folderKey(msg) {
+	if m.asking == "newdir" && m.folderKey(msg) || m.asking == "filter" && m.filterKey(msg) {
 		return m, nil
 	}
 	switch msg.String() {

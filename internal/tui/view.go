@@ -63,7 +63,7 @@ x               delete the task (the Claude session is kept)
 v               select: space ticks the task under the cursor, then x deletes, m moves, p parks or h hides
                 every ticked task after one y / n, escape leaves
 /               fuzzy filter by title, repo or task id, the cursor on the best fit: "hcfz" finds
-                "headcoach fuzzy"; escape clears
+                "headcoach fuzzy"; the arrows move the cursor as you type, escape clears
 :               command line: update, restart, columns, help, q
 u               update: install the latest release, after its notes and a yes; the board reloads itself
 o               order: by state, by cost, by tokens used, by context size

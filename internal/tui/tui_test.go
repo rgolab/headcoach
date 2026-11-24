@@ -256,6 +256,15 @@ func TestTheFilterIsFuzzyAndPicksTheBestFit(t *testing.T) {
 	if m, _ = press(t, m, "f"); m.current().ID != "aaaa0001" {
 		t.Errorf("f puts the cursor on %s", m.current().ID)
 	}
+	// The arrows move the cursor, the line stays open, j and k are letters of the filter.
+	m, _ = press(t, m, "down", "pgdown", "up")
+	if m.asking != "filter" || m.input.Value() != "f" || m.current().ID != "aaaa0001" {
+		t.Errorf("after the arrows: asking %q with %q, the cursor on %s", m.asking, m.input.Value(), m.current().ID)
+	}
+	m, _ = press(t, m, "j", "enter")
+	if m.needle != "fj" || len(m.keys) != 0 {
+		t.Errorf("j went to the cursor: filter %q, rows %v", m.needle, m.keys)
+	}
 }
 
 func TestCursorFollowsItsTask(t *testing.T) {
