@@ -1942,3 +1942,21 @@ func TestATaskLightsUpAsTheBoardSeesItMoveToDone(t *testing.T) {
 		t.Errorf("after the glow, lit = %v, glowing = %v", m.lit, m.glowing)
 	}
 }
+
+// A task shows under the one that drives it, with its sub-agents indented as deep.
+func TestBoardNestsChildTasks(t *testing.T) {
+	boss, kid := task("boss0001", "review", 9), task("kid00001", "needs", 1)
+	kid.Parent = boss.ID
+	kid.Agents = []api.Agent{{Name: "Explore", Desc: "look around", State: "running"}}
+	m := loaded(t, nil, kid, boss, task("other001", "running", 2))
+	// The child needs you, yet stays under its parent: the tree wins over the order of states.
+	if want := []string{"other001", "boss0001", "kid00001", "kid00001/0"}; !reflect.DeepEqual(m.keys, want) {
+		t.Errorf("keys = %v", m.keys)
+	}
+	screen := m.View()
+	for _, piece := range []string{"│boss0001 ▾ 1  Review ", "│└─ kid00001   Needs me ", "  title kid00001 ", "  └─ Explore: look around"} {
+		if !strings.Contains(screen, piece) {
+			t.Errorf("the board lacks %q:\n%s", piece, screen)
+		}
+	}
+}

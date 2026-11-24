@@ -345,3 +345,13 @@ func shellWords(t *testing.T, command string) []string {
 	words := strings.Split(out, "\x00")
 	return words[:len(words)-1]
 }
+
+// newTask2 adds a task to the backlog and returns the answer, whatever its status.
+func (f *fixture) newTask2(extra obj) response {
+	f.t.Helper()
+	data := obj{"prompt": "do the thing", "cwd": f.tmp}
+	for k, v := range extra {
+		data[k] = v
+	}
+	return f.post("/api/tasks", data)
+}

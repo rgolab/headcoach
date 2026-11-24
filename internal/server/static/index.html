@@ -15,6 +15,7 @@
   --fg: #151922; --muted: #5a6373; --accent: #2b5fd9; --on-accent: #ffffff;
   --run: #2b5fd9; --need: #a85a00; --need-bg: #fff0d9; --need-line: #e6b566;
   --rev: #6a45c2; --done: #2c7a4d; --idle: #6b7382; --hot: #c0392b; --scrim: rgba(15, 18, 24, .38); --you-bg: #ece6fb; --you-line: #b9a8ec; --agent-bg: #e8effd; --agent-line: #a5bdf2; --tool-bg: #e3f1e8; --tool-line: #9ccdb0;
+  --team-0: #0e7490; --team-1: #a21caf; --team-2: #15803d; --team-3: #1d4ed8; --team-4: #b45309; --team-5: #6d28d9;
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
@@ -24,6 +25,7 @@
     --fg: #e5e8ee; --muted: #8d97a9; --accent: #7aa2ff; --on-accent: #0e1117;
     --run: #7aa2ff; --need: #f0b25a; --need-bg: #2f2410; --need-line: #6e5320;
     --rev: #b59bff; --done: #6fcf97; --idle: #8d97a9; --hot: #ff7b6b; --scrim: rgba(0, 0, 0, .55); --you-bg: #261f3f; --you-line: #5a4a94; --agent-bg: #152039; --agent-line: #34497f; --tool-bg: #0f1f17; --tool-line: #2c5a40;
+    --team-0: #22d3ee; --team-1: #e879f9; --team-2: #4ade80; --team-3: #60a5fa; --team-4: #fbbf24; --team-5: #a78bfa;
     color-scheme: dark;
   }
 }
@@ -32,6 +34,7 @@
   --fg: #e5e8ee; --muted: #8d97a9; --accent: #7aa2ff; --on-accent: #0e1117;
   --run: #7aa2ff; --need: #f0b25a; --need-bg: #2f2410; --need-line: #6e5320;
   --rev: #b59bff; --done: #6fcf97; --idle: #8d97a9; --hot: #ff7b6b; --scrim: rgba(0, 0, 0, .55); --you-bg: #261f3f; --you-line: #5a4a94; --agent-bg: #152039; --agent-line: #34497f; --tool-bg: #0f1f17; --tool-line: #2c5a40;
+  --team-0: #22d3ee; --team-1: #e879f9; --team-2: #4ade80; --team-3: #60a5fa; --team-4: #fbbf24; --team-5: #a78bfa;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -187,6 +190,8 @@ html, body { margin: 0; }
 .list .tags { flex-wrap: nowrap; }
 .tag { border: 1px solid var(--line); border-radius: 4px; padding: 0 6px; font-size: 11px; line-height: 18px; color: var(--muted); text-decoration: none; white-space: nowrap; }
 .tag.persona { color: var(--done); border-color: var(--done); }
+.tag.team { font-family: var(--mono); color: var(--team); border-color: var(--team); }
+.tree { white-space: pre; font-weight: 700; }
 a.tag { font-family: var(--mono); color: var(--accent); border-color: var(--accent); }
 a.tag:hover { background: var(--accent); color: var(--on-accent); }
 .btn:disabled { opacity: .5; cursor: default; }
@@ -415,7 +420,11 @@ function tagsHtml(t) {
     : `<span class="tag mono">${esc(l.label)}</span>`).join("");
   const persona = t.persona ? `<span class="tag persona">${esc(t.persona)}</span>` : "";
   const timer = t.timer_left ? `<span class="tag timer" title="Closed by itself when the timer runs out">\u23f1 ${human(t.timer_left)}</span>` : "";
-  return `<div class="tags">${timer}${t.tags.map(x => `<span class="tag t-${esc(x)}">${esc(x)}</span>`).join("")}${persona}${refs}</div>`;
+  const boss = t.parent ? tasks.find(x => x.id === t.parent) : null;
+  const color = `--team: ${teamColor(topOf(t))}`, kids = tasks.filter(x => x.parent === t.id).length;
+  const parent = t.parent ? `<span class="tag team" style="${color}" title="Driven by ${esc(boss ? boss.title : t.parent)}">\u21b3 ${esc(t.parent.slice(0, 8))}</span>` : "";
+  const drives = kids ? `<span class="tag team" style="${color}" title="Drives ${kids} task${kids === 1 ? "" : "s"}">\u25be ${kids}</span>` : "";
+  return `<div class="tags">${drives}${parent}${timer}${t.tags.map(x => `<span class="tag t-${esc(x)}">${esc(x)}</span>`).join("")}${persona}${refs}</div>`;
 }
 const closed = t => !t.live && (t.state === "running" || t.state === "needs" || t.state === "review");
 
@@ -439,12 +448,52 @@ function cardHtml(t) {
   </div>`;
 }
 
+// teamColor is the color of a tree of tasks, picked from the task at its top as the terminal board
+// does: FNV-1a of its id.
+function teamColor(top) {
+  let h = 0x811c9dc5;
+  for (const b of new TextEncoder().encode(top)) h = Math.imul(h ^ b, 0x01000193) >>> 0;
+  return `var(--team-${h % 6})`;
+}
+// topOf is the task at the top of the tree a task is in.
+function topOf(t) {
+  for (const seen = new Set([t.id]); t.parent; ) {
+    const up = tasks.find(x => x.id === t.parent);
+    if (!up || seen.has(up.id)) break;
+    seen.add(up.id); t = up;
+  }
+  return t.id;
+}
+// branchHtml draws branches of a tree, or how many tasks a task drives, in the color of its tree.
+const branchHtml = (text, top) => text ? `<span class="tree" style="color: ${teamColor(top)}">${text}</span>` : "";
+const drivesHtml = (kids, top) => branchHtml(kids ? ` \u25be ${kids}` : "", top);
+
+// tree puts each task right after its parent, as the terminal board does, with the branches down to
+// it, the line that runs past its own child rows, how many tasks it drives and the task at the top.
+// A task whose parent is not in the list goes at the top.
+function tree(list) {
+  const ids = new Set(list.map(t => t.id)), kids = {}, out = [], seen = new Set();
+  for (const t of list) if (t.parent && t.parent !== t.id && ids.has(t.parent)) (kids[t.parent] ||= []).push(t);
+  const add = (t, depth, guide, last, top) => {
+    if (seen.has(t.id)) return;
+    seen.add(t.id);
+    const mine = kids[t.id] || [];
+    let branch = guide, below = guide;
+    if (depth) { branch += last ? "\u2514\u2500 " : "\u251c\u2500 "; below += last ? "   " : "\u2502  "; }
+    out.push({ t, branch, through: (below + (mine.length ? "\u2502" : "")).trimEnd(), kids: mine.length, top: top || t.id });
+    mine.forEach((k, i) => add(k, depth + 1, below, i === mine.length - 1, top || t.id));
+  };
+  for (const t of list) if (!t.parent || !ids.has(t.parent)) add(t, 0, "", true, "");
+  for (const t of list) add(t, 0, "", true, "");
+  return out;
+}
+
 function listHtml() {
-  const rows = sorted(tasks).map(t => {
+  const rows = tree(sorted(tasks)).map(({ t, branch, through, kids: drives, top }) => {
     const kids = t.agents.map((k, i, all) =>
-      `<tr class="child s-${k.state}"${litAttrs(t)} data-id="${t.id}"><td></td><td><span class="st"><span class="dot"></span>${stateName(k.state)}</span></td><td></td><td>${k.persona ? `<span class="tag persona">${esc(k.persona)}</span>` : ""}</td><td>${human(k.age)}</td><td></td><td></td><td>${tokensHtml(k.tokens)}</td><td></td><td>${i === all.length - 1 ? "└─" : "├─"} ${esc(k.name)}</td><td class="lastcol">${esc(k.desc)}</td></tr>`).join("");
+      `<tr class="child s-${k.state}"${litAttrs(t)} data-id="${t.id}"><td>${branchHtml(through, top)}</td><td><span class="st"><span class="dot"></span>${stateName(k.state)}</span></td><td></td><td>${k.persona ? `<span class="tag persona">${esc(k.persona)}</span>` : ""}</td><td>${human(k.age)}</td><td></td><td></td><td>${tokensHtml(k.tokens)}</td><td></td><td>${i === all.length - 1 ? "└─" : "├─"} ${esc(k.name)}</td><td class="lastcol">${esc(k.desc)}</td></tr>`).join("");
     const last = t.state === "needs" && t.ask ? t.ask : t.last;
-    return `<tr class="s-${t.state}"${litAttrs(t)} data-id="${t.id}" tabindex="0"><td>${t.short}</td><td><span class="st"><span class="dot"></span>${esc(t.state_name)}</span></td><td>${esc(t.repo)}</td><td>${tagsHtml(t)}</td><td>${human(t.age)}</td><td>${human(t.idle)}</td><td>${ctxHtml(t.context)}</td><td>${tokensHtml(t.tokens)}</td><td>${costHtml(t)}</td><td class="task">${esc(t.title)}${closed(t) ? ` <span class="chip closed">closed</span>` : ""}</td><td class="lastcol">${esc(last)}</td></tr>${kids}`;
+    return `<tr class="s-${t.state}"${litAttrs(t)} data-id="${t.id}" tabindex="0"><td>${branchHtml(branch, top)}${t.short}${drivesHtml(drives, top)}</td><td><span class="st"><span class="dot"></span>${esc(t.state_name)}</span></td><td>${esc(t.repo)}</td><td>${tagsHtml(t)}</td><td>${human(t.age)}</td><td>${human(t.idle)}</td><td>${ctxHtml(t.context)}</td><td>${tokensHtml(t.tokens)}</td><td>${costHtml(t)}</td><td class="task">${esc(t.title)}${closed(t) ? ` <span class="chip closed">closed</span>` : ""}</td><td class="lastcol">${esc(last)}</td></tr>${kids}`;
   }).join("");
   return `<table><thead><tr><th>Task</th><th>State</th><th>Repo</th><th>Tags</th><th>Age</th><th>Idle</th><th>Context</th><th>Tokens</th><th>Cost</th><th>Title</th><th>Last</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
@@ -563,7 +612,7 @@ async function refresh(force) {
     const data = await api("GET", "/api/tasks");
     $("#conn").classList.remove("down"); $("#conn-text").textContent = "live";
     loaded = true;
-    const sig = JSON.stringify(data.tasks.map(t => [t.id, t.state, t.title, t.last, t.ask, t.live, t.repo, t.agents, t.tags, t.links, t.persona, t.tokens, t.context, t.cost, Math.floor(t.age / 60), Math.floor(t.idle / 60), t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]));
+    const sig = JSON.stringify(data.tasks.map(t => [t.id, t.parent, t.state, t.title, t.last, t.ask, t.live, t.repo, t.agents, t.tags, t.links, t.persona, t.tokens, t.context, t.cost, Math.floor(t.age / 60), Math.floor(t.idle / 60), t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]));
     const was = new Map(tasks.map(t => [t.id, t.state])), now = Date.now();
     for (const id in litAt) if (now - litAt[id] >= LIT_MS) delete litAt[id];
     for (const t of data.tasks) if (was.has(t.id) && was.get(t.id) !== "done" && t.state === "done") litAt[t.id] = now;

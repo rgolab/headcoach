@@ -325,7 +325,14 @@ func isFile(path string) bool {
 // --- helpers -------------------------------------------------------------------------
 
 func (s *Server) find(r *http.Request) (*store.Task, error) {
-	id := r.PathValue("id")
+	if id := r.PathValue("id"); id != "self" {
+		return s.resolve(id)
+	}
+	return s.self(r)
+}
+
+// resolve finds a task by its id or a unique prefix of it.
+func (s *Server) resolve(id string) (*store.Task, error) {
 	task, err := s.st.Resolve(id)
 	switch {
 	case errors.Is(err, store.ErrAmbiguous):
@@ -984,8 +991,12 @@ func (s *Server) createTask(r *http.Request) (any, error) {
 		return nil, err
 	}
 	// The prompt of a task another agent adds is its first message: it carries a label, the title does not.
+	parent, err := s.parentFor(r, str(data, "parent"), "")
+	if err != nil {
+		return nil, err
+	}
 	title, prompt := strings.TrimSpace(str(data, "title")), strings.TrimSpace(str(data, "prompt"))
-	label := from.label(nil)
+	label := from.label(&store.Task{Parent: parent})
 	if label != "" && prompt != "" {
 		if title == "" {
 			title = board.Clip(board.FirstLine(prompt), 90)
@@ -994,6 +1005,11 @@ func (s *Server) createTask(r *http.Request) (any, error) {
 	}
 	task, err := s.addTask(title, prompt, str(data, "cwd"), str(data, "profile"), model, effort,
 		str(data, "source"), "", "you", truthy(data["start"]), timer)
+	if task != nil && parent != "" {
+		if err := s.st.UpdateTask(task.ID, store.Fields{"parent": parent}); err != nil {
+			return nil, err
+		}
+	}
 	if task != nil && label != "" && prompt != "" {
 		if err := s.record(task, from, "message", prompt); err != nil {
 			return nil, err
@@ -1112,6 +1128,16 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 	// Checked before any change: a refused request changes nothing.
 	if state, ok := data["state"].(string); hidden && (ok && state != "done" || !ok && task.State != "done") {
 		return nil, fail(400, "Only a done task can be hidden")
+	}
+	_, relink := data["parent"]
+	parent, err := s.parentFor(r, str(data, "parent"), task.ID)
+	if err != nil {
+		return nil, err
+	}
+	if relink {
+		if err := s.st.UpdateTask(task.ID, store.Fields{"parent": parent}); err != nil {
+			return nil, err
+		}
 	}
 	if _, ok := data["title"]; ok {
 		title := strings.TrimSpace(str(data, "title"))

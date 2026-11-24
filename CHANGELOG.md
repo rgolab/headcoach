@@ -7,6 +7,7 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 ### Added
 
 - a message `hc reply` sends from inside a session starts with its sender, such as `[from task 1a2b3c4d]`, so the other session never takes it for your words; `hc show`, the detail and the web board name the sender too
+- `hc new --parent <task>`, `hc link` and `hc unlink` put a task under the one that drives it; the board, `hc ls` and the web list draw the tree in the TASK column, in a color per tree, and `self` names the task of the session hc runs in
 
 ## [1.0.0] - 2026-11-23
 

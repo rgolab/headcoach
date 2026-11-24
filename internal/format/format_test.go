@@ -1,7 +1,9 @@
 package format
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/humblebundledore/headcoach/internal/api"
@@ -105,6 +107,49 @@ func TestTreeRows(t *testing.T) {
 	want := []string{"need1", "run1", "run1 a1", "run1 a2 last", "done1", "done1 a3 last"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("rows = %v", got)
+	}
+}
+
+// A task the board knows the parent of goes under it, its own child rows first, then the tasks it drives.
+func TestTreeRowsNestChildTasks(t *testing.T) {
+	boss, kid, grandkid := task("boss1", "review", 9), task("kid1", "needs", 1), task("grand1", "running", 2)
+	other, orphan := task("other1", "running", 3), task("orphan1", "done", 4)
+	kid.Parent, grandkid.Parent, orphan.Parent = "boss1", "kid1", "gone1"
+	boss.Agents = []api.Agent{{Name: "a1"}}
+	kid.Agents = []api.Agent{{Name: "a2"}}
+	// Two tasks under each other, which the daemon refuses, still show, at the end.
+	loop1, loop2 := task("loop1", "parked", 5), task("loop2", "parked", 6)
+	loop1.Parent, loop2.Parent = "loop2", "loop1"
+	var got []string
+	for _, row := range TreeRows([]api.Task{orphan, grandkid, other, kid, boss, loop1, loop2}, "state") {
+		line := fmt.Sprintf("%d %s%s %s [%s]", row.Depth, row.Tree, row.Task.ID, Drives(row.Kids), row.Team)
+		if row.Agent != nil {
+			line = fmt.Sprintf("%d %s|%s %s", row.Depth, row.Tree, Branch(row), row.Agent.Name)
+		}
+		got = append(got, line)
+	}
+	want := []string{
+		"0 other1  [other1]", "0 boss1 ▾ 1 [boss1]", "0 │|└─ a1", "1 └─ kid1 ▾ 1 [boss1]", "1    │|└─ a2", "2    └─ grand1  [boss1]",
+		"0 orphan1  [orphan1]", "0 loop1 ▾ 1 [loop1]", "1 └─ loop2 ▾ 1 [loop1]",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("rows =\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// Siblings hang off one line that stops at the last of them.
+func TestTreeRowsBranches(t *testing.T) {
+	boss, a, b, a1 := task("boss1", "running", 1), task("a1", "running", 2), task("b1", "running", 3), task("aa1", "running", 4)
+	a.Parent, b.Parent, a1.Parent = "boss1", "boss1", "a1"
+	var got []string
+	for _, row := range TreeRows([]api.Task{boss, a, b, a1}, "state") {
+		got = append(got, row.Tree+row.Task.ID)
+	}
+	if want := []string{"boss1", "├─ a1", "│  └─ aa1", "└─ b1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("tree =\n%s", strings.Join(got, "\n"))
+	}
+	if Drives(0) != "" || Drives(3) != "▾ 3" {
+		t.Errorf("Drives = %q %q", Drives(0), Drives(3))
 	}
 }
 

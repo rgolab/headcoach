@@ -109,20 +109,93 @@ type Row struct {
 	Task  *api.Task
 	Agent *api.Agent // nil on the line of the task itself
 	Last  bool       // whether the agent is the last child of its task
+	// Depth is how many parents the task has above it in the tree: 0 for a task at the top.
+	Depth int
+	// Tree is what the line starts with: the branches from the task's parents down to it, or on a child
+	// row, the lines that go on past it to the tasks below.
+	Tree string
+	// Kids is how many of the tasks listed the task drives.
+	Kids int
+	// Team is the task at the top of its tree: the task itself when no parent of it is listed.
+	Team string
 }
 
-// TreeRows flattens tasks and their child rows into lines.
+// TreeRows flattens tasks into lines: each task, its sub-agents and background jobs, then the tasks
+// it drives, in the same order. A task whose parent is not in the list goes at the top.
 func TreeRows(tasks []api.Task, by string) []Row {
 	sorted := SortTasks(tasks, by)
-	var rows []Row
+	listed := map[string]bool{}
 	for i := range sorted {
-		task := &sorted[i]
-		rows = append(rows, Row{Task: task})
-		for j := range task.Agents {
-			rows = append(rows, Row{Task: task, Agent: &task.Agents[j], Last: j == len(task.Agents)-1})
+		listed[sorted[i].ID] = true
+	}
+	children := map[string][]*api.Task{}
+	for i := range sorted {
+		if p := sorted[i].Parent; p != "" && p != sorted[i].ID && listed[p] {
+			children[p] = append(children[p], &sorted[i])
 		}
 	}
+	var rows []Row
+	placed := map[string]bool{}
+	// guide is the lines of the parents above that go on past the task; last, whether it is the last
+	// task its parent drives.
+	var add func(task *api.Task, depth int, guide string, last bool, team string)
+	add = func(task *api.Task, depth int, guide string, last bool, team string) {
+		if placed[task.ID] {
+			return
+		}
+		placed[task.ID] = true
+		if team == "" {
+			team = task.ID
+		}
+		kids := children[task.ID]
+		tree, below := guide, guide
+		if depth > 0 {
+			tree, below = guide+"├─ ", guide+"│  "
+			if last {
+				tree, below = guide+"└─ ", guide+"   "
+			}
+		}
+		rows = append(rows, Row{Task: task, Depth: depth, Tree: tree, Kids: len(kids), Team: team})
+		// Its own child rows sit between it and the tasks it drives: the line to them runs past.
+		through := below
+		if len(kids) > 0 {
+			through += "│"
+		}
+		through = strings.TrimRight(through, " ")
+		for j := range task.Agents {
+			rows = append(rows, Row{Task: task, Agent: &task.Agents[j], Last: j == len(task.Agents)-1, Depth: depth,
+				Tree: through, Team: team})
+		}
+		for j, child := range kids {
+			add(child, depth+1, below, j == len(kids)-1, team)
+		}
+	}
+	for i := range sorted {
+		if p := sorted[i].Parent; p == "" || !listed[p] {
+			add(&sorted[i], 0, "", true, "")
+		}
+	}
+	// Tasks that are each other's parents, which the daemon refuses, still show: at the top.
+	for i := range sorted {
+		add(&sorted[i], 0, "", true, "")
+	}
 	return rows
+}
+
+// Drives marks a task that drives others with how many: "▾ 2". Empty for one that drives none.
+func Drives(kids int) string {
+	if kids == 0 {
+		return ""
+	}
+	return fmt.Sprintf("▾ %d", kids)
+}
+
+// Branch is what a child row of a task starts with: the branch to its sub-agent or background job.
+func Branch(row Row) string {
+	if row.Last {
+		return "└─"
+	}
+	return "├─"
 }
 
 // Who names the author of a log turn in five characters at most: you, agent, tool, or for a message

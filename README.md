@@ -24,6 +24,7 @@ The same board in the browser:
 - any other finished turn goes to `Done`; an open board lights the task up green for a few seconds, then greys it
 - each task shows its context window, its tokens and its cost at API prices
 - sub-agents and background commands show up under their task
+- a task can drive other tasks: they show up under it, see [Coordinators](#coordinators)
 - a session or a sub-agent that loads a persona skill, such as `/reviewer`, shows it in the PERSONA column
 - the top of the board shows how much of your 5 hour and 7 day limits is used, see [Limits and cost](#limits-and-cost)
 - you enter a session with one key, leave it with another, and it keeps running
@@ -106,6 +107,7 @@ Then:
 - `hc show <id>` prints a session and the end of its log
 - `hc new --timer 10m "<prompt>"` gives a task a timer, see [Timers](#timers)
 - `hc new --model sonnet --effort low "<prompt>"` picks the model and the effort level, see [Model and effort](#model-and-effort)
+- `hc new --parent <id> "<prompt>"`, `hc link <id> <parent>` and `hc unlink <id>` put a task under the one that drives it, see [Coordinators](#coordinators)
 - `hc move <id> <state>` moves a session, the state as the board shows it, `Running` or `Needs me`, and `Parked` closes it
 - `hc adopt <id>` moves a session from your tmux into the board's
 - `hc limits` shows each limit and when it resets
@@ -186,6 +188,13 @@ Then:
 ## Coordinators
 
 - a task can drive other tasks: it briefs them with `hc new`, relays decisions with `hc reply`, and reads them with `hc show`
+- `hc new --parent <task> "<prompt>"` puts the new task under the one that drives it; `--parent self` is the task of the session hc runs in
+- `hc link <task> <parent>` puts a task already there under another one, `hc unlink <task>` takes it out
+- a task has one parent at most, and a parent can be any task; a loop is refused
+- the board, `hc ls` and the web list draw the tree in the TASK column: a parent says how many tasks it drives, `▾ 2`, and each one hangs under it, after the parent's sub-agents, on a `├─` or `└─` branch
+- each tree takes a color of its own, picked from the task at its top, on the board and on the web board
+- a card of the web board names its parent with a `↳` tag, and a parent card says how many tasks it drives with a `▾` tag, in the color of their tree
+- `self` works wherever a command takes a task, from inside a session: `hc show self`
 - `hc reply` from inside a session puts its sender before the message: `[from task 1a2b3c4d] stop`, so the other session never takes it for your words
 - `hc new` from inside a session does the same to the task's first prompt
 - a slash command keeps its place and the label goes before its arguments; a bare one such as `/compact` has none

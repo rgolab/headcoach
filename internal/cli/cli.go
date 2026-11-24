@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/humblebundledore/headcoach/internal/api"
 	"github.com/humblebundledore/headcoach/internal/board"
@@ -111,7 +112,10 @@ func init() {
 			{name: "timer", value: true, help: "close the task once this long has passed, e.g. 10m or 1h30m, whatever it is doing"},
 			{name: "model", value: true, help: "model to start Claude Code on, e.g. sonnet (default: the profile's)"},
 			{name: "effort", value: true, help: "effort level: " + efforts + " (default: the profile's)"},
+			{name: "parent", value: true, help: "the task that drives this one; self is the task of the session hc runs in"},
 		}},
+		{name: "link", args: task + " <parent>", help: "put a task under the one that drives it; self is the task of the session hc runs in", min: 2, max: 2, run: cmdLink},
+		{name: "unlink", args: task, help: "take a task from under its parent", min: 1, max: 1, run: cmdUnlink},
 		{name: "review", help: "list the tasks in Review, the one waiting longest first, with their change", run: cmdReview, flags: []flag{jsonFlag}},
 		{name: "start", args: task, help: "start or resume a task in a new tmux window", min: 1, max: 1, run: cmdStart},
 		{name: "attach", args: task, help: "enter a task's session from this terminal; Ctrl-] comes back", min: 1, max: 1, run: cmdAttach},
@@ -354,17 +358,20 @@ func cmdLs(e *env, p parsed) error {
 		e.printf("No open tasks. Start a Claude session, or add one with: hc new\n")
 		return nil
 	}
-	const columns = "%-9s %-9s %-8s %-6s %-6s %-26s %-16s %-4s %6s %6s %9s %6s %6s %6s %6s %5s %-8s  "
-	e.printf("%s\n", e.paint(fmt.Sprintf(columns+"TITLE", "TASK", "STATE", "PROFILE", "MODEL", "EFFORT", "PERSONA", "REPO", "TMUX", "AGE", "IDLE", "CTX", "IN", "OUT", "CACHE", "COST", "⏱", "↻"), "dim"))
-	for _, row := range format.TreeRows(tasks, by) {
+	const columns = "%-9s %-8s %-6s %-6s %-26s %-16s %-4s %6s %6s %9s %6s %6s %6s %6s %5s %-8s  "
+	rows := format.TreeRows(tasks, by)
+	// The TASK column grows with the tree: the branches down to a task, and how many it drives.
+	width := 9
+	for _, row := range rows {
+		width = max(width, utf8.RuneCountInString(taskCell(row)))
+	}
+	e.printf("%s\n", e.paint(fmt.Sprintf("%-*s "+columns+"TITLE", width, "TASK", "STATE", "PROFILE", "MODEL", "EFFORT", "PERSONA", "REPO", "TMUX", "AGE", "IDLE", "CTX", "IN", "OUT", "CACHE", "COST", "⏱", "↻"), "dim"))
+	for _, row := range rows {
 		t := row.Task
 		if a := row.Agent; a != nil {
-			branch := "├─"
-			if row.Last {
-				branch = "└─"
-			}
+			branch := format.Branch(row)
 			in, out, cache := format.TokenCells(a.Tokens)
-			line := fmt.Sprintf(columns+"%s %s: %s", "", store.StateName(a.State), "", "", "", cut(a.Persona, 26), "", "", format.Human(a.Age), "", "", in, out, cache, "", "", "", branch, a.Name, a.Desc)
+			line := fmt.Sprintf("%-*s "+columns+"%s %s: %s", width, row.Tree, store.StateName(a.State), "", "", "", cut(a.Persona, 26), "", "", format.Human(a.Age), "", "", in, out, cache, "", "", "", branch, a.Name, a.Desc)
 			e.printf("%s\n", e.paint(line, "dim"))
 			continue
 		}
@@ -380,14 +387,14 @@ func cmdLs(e *env, p parsed) error {
 		timer := orDash(format.TimerCell(t.TimerLeft))
 		schedule := orDash(format.ScheduleCell(t.Schedule))
 		in, out, cache := format.TokenCells(&t.Tokens)
-		e.printf("%-9s %s %-8s %-6s %-6s %-26s %-16s %-4s %6s %6s %s %6s %6s %6s %6s %5s %-8s  %s%s\n",
-			t.Short, e.paint(fmt.Sprintf("%-9s", t.StateName), t.State), cut(profile, 8), cut(model, 6), cut(effort, 6), cut(persona, 26), cut(t.Repo, 16), where,
+		e.printf("%-*s %s %-8s %-6s %-6s %-26s %-16s %-4s %6s %6s %s %6s %6s %6s %6s %5s %-8s  %s%s\n",
+			width, taskCell(row), e.paint(fmt.Sprintf("%-9s", t.StateName), t.State), cut(profile, 8), cut(model, 6), cut(effort, 6), cut(persona, 26), cut(t.Repo, 16), where,
 			format.Human(t.Age), format.Human(t.Idle),
 			e.paint(fmt.Sprintf("%9s", format.ContextCell(t.Context)), format.ContextLevel(t.Context)),
 			in, out, cache, format.Money(t.Cost), timer,
 			schedule, t.Title, closed)
 		if t.State == "needs" {
-			e.printf("%s\n", e.paint(fmt.Sprintf("%-158s? %s", "", t.Ask), "needs"))
+			e.printf("%s\n", e.paint(fmt.Sprintf("%-*s? %s", 149+width, "", t.Ask), "needs"))
 		}
 	}
 	if len(board.Limits) > 0 {
@@ -416,11 +423,15 @@ func cmdShow(e *env, p parsed) error {
 	persona := orDash(t.Persona)
 	where := orDash(map[string]string{"hc": "the board's own tmux, Ctrl-] detaches", "own": "your tmux"}[t.Tmux])
 	e.printf("%s\n\n", t.Title)
-	for _, line := range [][2]string{
+	lines := [][2]string{
 		{"task", t.ID}, {"state", state}, {"repo", t.Repo}, {"branch", t.Branch}, {"dir", t.Cwd},
 		{"tmux", where}, {"profile", t.Profile}, {"model", orDefault(t.Model)}, {"effort", orDefault(t.Effort)},
-		{"persona", persona}, {"resume", t.Resume},
-	} {
+		{"persona", persona},
+	}
+	if t.Parent != "" {
+		lines = append(lines, [2]string{"parent", board.Short(t.Parent)})
+	}
+	for _, line := range append(lines, [2]string{"resume", t.Resume}) {
 		e.printf("  %-8s %s\n", line[0], line[1])
 	}
 	if t.Context.Tokens > 0 {
@@ -521,8 +532,10 @@ func cmdNew(e *env, p parsed) error {
 	data := map[string]any{
 		"prompt": strings.Join(p.args, " "), "title": p.get("title", ""), "cwd": dir, "start": p.has("start"),
 	}
-	if profile := p.get("profile", ""); profile != "" {
-		data["profile"] = profile
+	for _, name := range []string{"profile", "parent"} {
+		if value := p.get(name, ""); value != "" {
+			data[name] = value
+		}
 	}
 	if p.has("timer") {
 		timer, err := parseTimer(p.get("timer", ""))
@@ -621,6 +634,37 @@ func cmdMove(e *env, p parsed) error {
 	}
 	e.printf("%s  %s  %s\n", t.Short, t.StateName, t.Title)
 	return nil
+}
+
+func cmdLink(e *env, p parsed) error {
+	t, err := e.client.Do("PATCH", "/api/tasks/"+p.args[0], map[string]string{"parent": p.args[1]})
+	if err != nil {
+		return err
+	}
+	e.printf("%s  now under %s\n", t.Short, board.Short(t.Parent))
+	return nil
+}
+
+func cmdUnlink(e *env, p parsed) error {
+	t, err := e.client.Do("PATCH", "/api/tasks/"+p.args[0], map[string]string{"parent": ""})
+	if err != nil {
+		return err
+	}
+	e.printf("%s  now at the top of the board\n", t.Short)
+	return nil
+}
+
+// taskCell is a task in the TASK column: the branches of the tree down to it, its id, and how many
+// tasks it drives.
+func taskCell(row format.Row) string {
+	if row.Agent != nil {
+		return row.Tree
+	}
+	cell := row.Tree + row.Task.Short
+	if drives := format.Drives(row.Kids); drives != "" {
+		cell += " " + drives
+	}
+	return cell
 }
 
 func cmdStart(e *env, p parsed) error {

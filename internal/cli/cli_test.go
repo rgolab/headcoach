@@ -221,6 +221,43 @@ func TestReplyFromAnotherTask(t *testing.T) {
 	}
 }
 
+// hc new --parent, hc link and hc unlink put a task under another one, and hc ls prints the tree.
+func TestLinks(t *testing.T) {
+	f := newFixture(t)
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "coordinate"})
+	out := f.ok("new", "-t", "Child", "--parent", "abcd", "do it")
+	child := strings.Fields(out)[0]
+	f.ok("new", "-t", "Other", "do that")
+	ls := f.ok("ls")
+	// The tree hangs in the TASK column: the parent says how many tasks it drives, its child branches off.
+	if !strings.Contains(ls, "\nabcd1234 ▾ 1 Running ") || !strings.Contains(ls, "\n└─ "+child+"  Backlog ") ||
+		!strings.Contains(ls, "  Child\n") || !strings.Contains(ls, "  Other\n") {
+		t.Errorf("ls does not nest the child:\n%s", ls)
+	}
+	if i, j := strings.Index(ls, "abcd1234 ▾ 1"), strings.Index(ls, "└─ "+child); i < 0 || j < i {
+		t.Errorf("the child is not under its parent:\n%s", ls)
+	}
+	if out := f.ok("show", child); !strings.Contains(out, "  parent   abcd1234\n") {
+		t.Errorf("show lacks the parent:\n%s", out)
+	}
+	if out := f.ok("unlink", child); out != child+"  now at the top of the board\n" {
+		t.Errorf("unlink printed %q", out)
+	}
+	if out := f.ok("link", child, "abcd"); out != child+"  now under abcd1234\n" {
+		t.Errorf("link printed %q", out)
+	}
+	if code, _, errOut := f.hc("link", "abcd", child); code == 0 || !strings.Contains(errOut, "cannot be under itself") {
+		t.Errorf("a loop: %d %s", code, errOut)
+	}
+	// From inside the parent's session, self names it.
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "abcd1234-s1")
+	out = f.ok("new", "-t", "Mine", "--parent", "self", "mine")
+	var detail api.Task
+	if err := json.Unmarshal([]byte(f.ok("show", "--json", strings.Fields(out)[0])), &detail); err != nil || detail.Parent != "abcd1234-s1" {
+		t.Errorf("--parent self: %+v %v", detail.Parent, err)
+	}
+}
+
 func TestShow(t *testing.T) {
 	f := newFixture(t)
 	transcript := filepath.Join(f.tmp, "s1.jsonl")
