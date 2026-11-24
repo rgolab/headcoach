@@ -97,7 +97,7 @@ func init() {
 		}},
 		{name: "ls", help: "list tasks as a tree", run: cmdLs, flags: []flag{
 			{name: "all", short: "a", help: "include done tasks"},
-			{name: "sort", short: "s", value: true, help: "state (default), cost, tokens or ctx: the biggest first"},
+			{name: "sort", short: "s", value: true, help: "state (default); idle, the most recently active first; cost, tokens or ctx, the biggest first"},
 			jsonFlag,
 		}},
 		{name: "show", args: task, help: "show one task and the end of its session", min: 1, max: 1, run: cmdShow, flags: []flag{

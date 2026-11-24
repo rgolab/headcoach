@@ -213,6 +213,10 @@ func TestRowsOrderFilterAndDone(t *testing.T) {
 	if len(m.keys) != 6 || m.keys[5] != "done0001" || strings.Contains(m.View(), "(1 hidden)") {
 		t.Errorf("with done tasks, rows = %v", m.keys)
 	}
+	m, _ = press(t, m, "o")
+	if m.order != "idle" || m.keys[len(m.keys)-1] != "need0001" || !strings.Contains(m.View(), "by idle") {
+		t.Errorf("sorted by %s, rows = %v", m.order, m.keys)
+	}
 	m, _ = press(t, m, "o", "o")
 	if m.order != "tokens" || m.keys[0] != "other001" || !strings.Contains(m.View(), "by tokens") {
 		t.Errorf("sorted by %s, rows = %v", m.order, m.keys)

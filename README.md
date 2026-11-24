@@ -83,7 +83,7 @@ Then:
 | `s` | start or resume |
 | `p` | park: close the session, keep it for later |
 | `m` | move to another state |
-| `o` | order by state, cost, tokens or context |
+| `o` | order by state, idle time, cost, tokens or context |
 | `/` | fuzzy filter by title, repo or task id: `hcfz` finds "headcoach fuzzy", the cursor goes to the best fit, the arrows move it as you type |
 | `:` | command line: `update` installs the latest release, `restart` restarts the daemon, `columns` opens the columns, `help`, `q` |
 | `u` | update: install the latest release, after its notes and a yes |
@@ -97,7 +97,7 @@ Then:
 ## Commands
 
 - `hc ls` lists the sessions and the limits
-- `hc ls --sort cost` puts the most expensive session first
+- `hc ls --sort cost` puts the most expensive session first, `--sort idle` the most recently active one
 - `hc new -s "<prompt>"` starts a session in the current directory
 - `hc attach <id>` enters a session
 - `hc ask <id> ["<question>"]` answers a question about a session, or summarises it

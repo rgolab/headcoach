@@ -73,6 +73,10 @@ func TestSortTasks(t *testing.T) {
 	if tasks[0].ID != "done1" {
 		t.Error("the input was reordered")
 	}
+	want = []string{"done1", "park1", "run1", "need1", "back1", "rev1", "need2", "run2"}
+	if got := ids(SortTasks(tasks, "idle")); !reflect.DeepEqual(got, want) {
+		t.Errorf("by idle = %v", got)
+	}
 	if len(SortTasks(nil, "state")) != 0 {
 		t.Error("no tasks should sort to no tasks")
 	}

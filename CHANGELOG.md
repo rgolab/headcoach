@@ -12,6 +12,7 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 - each task can keep a handoff file, where the work stands, outside the checkout: `hc handoff` prints it, `hc show` and the boards sum it up, and `hc reset` clears a task's context and points the fresh one at it
 - `hc team`, `w` on the board, and the web detail show what a task drives: each task under it, where it stands, and what waits on you among them
 - while you type the filter, the up and down arrows move the cursor, so you pick a task without leaving the line
+- `o` on the board orders the tasks by idle time too, the most recently active first; so do `hc ls --sort idle` and the web board's Sort menu
 
 ### Changed
 

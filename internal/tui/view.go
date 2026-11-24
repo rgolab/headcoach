@@ -66,7 +66,7 @@ v               select: space ticks the task under the cursor, then x deletes, m
                 "headcoach fuzzy"; the arrows move the cursor as you type, escape clears
 :               command line: update, restart, columns, help, q
 u               update: install the latest release, after its notes and a yes; the board reloads itself
-o               order: by state, by cost, by tokens used, by context size
+o               order: by state, by idle time, by cost, by tokens used, by context size
 h               hide a done task, or show a hidden one again
 d               show or hide the hidden done tasks
 S               schedules: tasks that start themselves at a time of day, or on a cron line

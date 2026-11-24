@@ -273,7 +273,7 @@ a.tag:hover { background: var(--accent); color: var(--on-accent); }
   <span id="usage" title="Tokens of every task on the board"></span>
   <span id="limits"></span>
   <label class="sort">Sort <select id="sortby">
-    <option value="state">by state</option><option value="cost">by cost</option><option value="tokens">by tokens used</option><option value="ctx">by context size</option>
+    <option value="state">by state</option><option value="idle">by idle time</option><option value="cost">by cost</option><option value="tokens">by tokens used</option><option value="ctx">by context size</option>
   </select></label>
   <div class="seg" role="group" aria-label="View">
     <button class="btn" type="button" data-view="board">Board</button>
@@ -317,7 +317,7 @@ let tasks = [], detail = null, team = null, openId = null, dragId = null, view =
 let boardSig = "", detailSig = "", loaded = false, confirmDelete = false, editingTitle = false;
 try { if (localStorage.getItem("view") === "list") view = "list"; } catch (err) {}
 let sortBy = "state";
-try { sortBy = ["cost", "tokens", "ctx"].includes(localStorage.getItem("sort")) ? localStorage.getItem("sort") : "state"; } catch (err) {}
+try { sortBy = ["idle", "cost", "tokens", "ctx"].includes(localStorage.getItem("sort")) ? localStorage.getItem("sort") : "state"; } catch (err) {}
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -349,6 +349,7 @@ const money = usd => !usd ? "" : "$" + (usd < 10 ? usd.toFixed(2) : usd < 100 ? 
 const costHtml = t => t.cost ? `<span class="tok" title="What Claude Code prices this task at, at API rates">${money(t.cost)}</span>` : "";
 const total = t => { const k = t.tokens || {}; return (k.in || 0) + (k.out || 0) + (k.cache_read || 0) + (k.cache_write || 0); };
 function sorted(list) {
+  if (sortBy === "idle") return list.slice().sort((a, b) => a.idle - b.idle);
   if (sortBy === "cost") return list.slice().sort((a, b) => (b.cost || 0) - (a.cost || 0));
   if (sortBy === "tokens") return list.slice().sort((a, b) => total(b) - total(a));
   if (sortBy === "ctx") return list.slice().sort((a, b) => ((b.context || {}).tokens || 0) - ((a.context || {}).tokens || 0));
