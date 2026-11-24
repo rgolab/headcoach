@@ -36,9 +36,10 @@ func cmdServe(e *env, p parsed) error {
 
 	daemon := server.New(cfg, st, &tmux.Client{})
 	handler := daemon.Handler()
-	schedulesDone := make(chan struct{})
-	defer close(schedulesDone)
-	go daemon.RunSchedules(schedulesDone)
+	loopsDone := make(chan struct{})
+	defer close(loopsDone)
+	go daemon.RunSchedules(loopsDone)
+	go daemon.RunInbox(loopsDone)
 	if p.has("verbose") {
 		handler = logged(handler)
 	}

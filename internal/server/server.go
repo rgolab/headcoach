@@ -76,6 +76,7 @@ type Tmux interface {
 	SendText(pane, text, socket string) error
 	RenameWindow(pane, name, socket string)
 	Capture(pane, socket string) string
+	CaptureStyled(pane, socket string) string
 	KillPane(pane, socket string)
 	SendKeys(pane string, keys []string, socket string) error
 	TypeText(pane, text, socket string) error
@@ -102,6 +103,8 @@ type Server struct {
 	// PRState asks the forge about a pull or merge request. Tests replace it.
 	PRState     func(url string) review.PR
 	attachCheck time.Duration
+	// clearWait is how long a reset waits for the cleared session to come back before it briefs it.
+	clearWait time.Duration
 
 	mu            sync.Mutex
 	lastReconcile float64
@@ -112,7 +115,7 @@ type Server struct {
 func New(cfg *config.Config, st *store.Store, tm Tmux) *Server {
 	return &Server{cfg: cfg, st: st, board: board.New(st, cfg), tmux: tm, Ask: ask.Run, Log: transcript.Log,
 		AttachProcess: attachProcess, attachCheck: attachCheck, Inspect: review.InspectCached,
-		PRState: review.StateOf}
+		PRState: review.StateOf, clearWait: 15 * time.Second}
 }
 
 // httpError is an error with the status the client should get.
@@ -166,6 +169,15 @@ func (s *Server) Handler() http.Handler {
 	locked("DELETE /api/tasks/{id}", s.deleteTask)
 	locked("POST /api/tasks/{id}/start", s.startTask)
 	locked("POST /api/tasks/{id}/reply", s.reply)
+	locked("GET /api/tasks/{id}/inbox", s.inbox)
+	locked("GET /api/tasks/{id}/team", s.team)
+	locked("GET /api/tasks/{id}/handoff", s.getHandoff)
+	locked("POST /api/tasks/{id}/handoff", s.initHandoff)
+	// A reset waits for the cleared session to come back: it locks only while it reads or types.
+	mux.HandleFunc("POST /api/tasks/{id}/reset", func(w http.ResponseWriter, r *http.Request) {
+		value, err := s.reset(r)
+		respond(w, value, err)
+	})
 	locked("GET /api/tasks/{id}/screen", s.screen)
 	locked("POST /api/tasks/{id}/keys", s.keys)
 	locked("POST /api/tasks/{id}/focus", s.focus)
@@ -325,7 +337,14 @@ func isFile(path string) bool {
 // --- helpers -------------------------------------------------------------------------
 
 func (s *Server) find(r *http.Request) (*store.Task, error) {
-	id := r.PathValue("id")
+	if id := r.PathValue("id"); id != "self" {
+		return s.resolve(id)
+	}
+	return s.self(r)
+}
+
+// resolve finds a task by its id or a unique prefix of it.
+func (s *Server) resolve(id string) (*store.Task, error) {
 	task, err := s.st.Resolve(id)
 	switch {
 	case errors.Is(err, store.ErrAmbiguous):
@@ -702,6 +721,9 @@ func (s *Server) view(task *store.Task, detail bool) (*api.Task, error) {
 			rows.Close()
 			return nil, err
 		}
+		if id := store.TaskOf(move.By); id != "" {
+			move.By = "task " + board.Short(id)
+		}
 		d.History = append(d.History, move)
 	}
 	if err := rows.Close(); err != nil {
@@ -716,6 +738,7 @@ func (s *Server) view(task *store.Task, detail bool) (*api.Task, error) {
 	if sess != nil && !out.CanReply {
 		d.Screen = s.screenText(sess)
 	}
+	d.Handoff = s.readHandoff(task.ID)
 	return out, nil
 }
 
@@ -757,7 +780,7 @@ func (s *Server) openWindowBy(task *store.Task, prompt, by string) (string, erro
 	}
 	window := tmux.Window{
 		Cwd: cwd, Command: command, Name: board.WindowName(task),
-		Env: []string{"HC_TASK=" + task.ID, "HC_URL=" + s.cfg.URL()},
+		Env: []string{"HC_TASK=" + task.ID, "HC_URL=" + s.cfg.URL(), "HC_HANDOFF=" + s.cfg.HandoffPath(task.ID)},
 	}
 	var pane string
 	if s.cfg.PrivateTmux {
@@ -979,8 +1002,35 @@ func (s *Server) createTask(r *http.Request) (any, error) {
 	}
 	model, _ := launch["model"].(string)
 	effort, _ := launch["effort"].(string)
-	task, err := s.addTask(str(data, "title"), str(data, "prompt"), str(data, "cwd"), str(data, "profile"), model, effort,
-		str(data, "source"), "", "you", truthy(data["start"]), timer)
+	from, err := s.caller(r)
+	if err != nil {
+		return nil, err
+	}
+	// The prompt of a task another agent adds is its first message: it carries a label, the title does not.
+	parent, err := s.parentFor(r, str(data, "parent"), "")
+	if err != nil {
+		return nil, err
+	}
+	title, prompt := strings.TrimSpace(str(data, "title")), strings.TrimSpace(str(data, "prompt"))
+	label := from.label(&store.Task{Parent: parent})
+	if label != "" && prompt != "" {
+		if title == "" {
+			title = board.Clip(board.FirstLine(prompt), 90)
+		}
+		prompt = board.Labeled(label, prompt)
+	}
+	task, err := s.addTask(title, prompt, str(data, "cwd"), str(data, "profile"), model, effort,
+		str(data, "source"), "", from.by(), truthy(data["start"]), timer)
+	if task != nil && parent != "" {
+		if err := s.st.UpdateTask(task.ID, store.Fields{"parent": parent}); err != nil {
+			return nil, err
+		}
+	}
+	if task != nil && label != "" && prompt != "" {
+		if err := s.record(task, from, "message", prompt); err != nil {
+			return nil, err
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1043,11 +1093,16 @@ func (s *Server) checkProfile(profile string) (string, error) {
 func (s *Server) getTask(r *http.Request) (any, error) {
 	s.mu.Lock()
 	out, paths, err := s.detail(r)
+	var sent []store.Message
+	if err == nil {
+		sent, err = s.st.Messages(out.ID)
+	}
 	s.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
 	out.Log = append(out.Log, s.Log(paths, logTurns)...)
+	senders(out.Log, sent)
 	for i := range out.Log {
 		if out.Log[i].Who == "agent" {
 			out.Log[i].HTML = transcript.Render(out.Log[i].Text)
@@ -1089,6 +1144,20 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 	// Checked before any change: a refused request changes nothing.
 	if state, ok := data["state"].(string); hidden && (ok && state != "done" || !ok && task.State != "done") {
 		return nil, fail(400, "Only a done task can be hidden")
+	}
+	from, err := s.caller(r)
+	if err != nil {
+		return nil, err
+	}
+	_, relink := data["parent"]
+	parent, err := s.parentFor(r, str(data, "parent"), task.ID)
+	if err != nil {
+		return nil, err
+	}
+	if relink {
+		if err := s.st.UpdateTask(task.ID, store.Fields{"parent": parent}); err != nil {
+			return nil, err
+		}
 	}
 	if _, ok := data["title"]; ok {
 		title := strings.TrimSpace(str(data, "title"))
@@ -1135,10 +1204,10 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 				s.tmux.KillPane(live.Pane, live.Socket)
 			}
 			if err = s.closeSessions(task.ID); err == nil {
-				_, err = s.st.SetState(task.ID, "parked", "you", store.Fields{"last": "Parked by you"})
+				_, err = s.st.SetState(task.ID, "parked", from.by(), store.Fields{"last": "Parked by " + from.name()})
 			}
 		case state != task.State:
-			_, err = s.st.SetState(task.ID, state, "you", store.Fields{"last": "Moved by you"})
+			_, err = s.st.SetState(task.ID, state, from.by(), store.Fields{"last": "Moved by " + from.name()})
 		}
 		if err != nil {
 			return nil, err
@@ -1158,6 +1227,7 @@ func (s *Server) deleteTask(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	_ = os.Remove(s.cfg.HandoffPath(task.ID)) // its handoff goes with it; there may be none
 	return map[string]string{"deleted": task.ID}, s.st.DeleteTask(task.ID)
 }
 
@@ -1194,21 +1264,32 @@ func (s *Server) reply(r *http.Request) (any, error) {
 	if text == "" {
 		return nil, fail(400, "The message is empty")
 	}
+	from, err := s.caller(r)
+	if err != nil {
+		return nil, err
+	}
+	label := from.label(task)
 	sess, err := s.liveSession(task.ID)
 	if err != nil {
 		return nil, err
 	}
 	if sess == nil {
 		// No terminal left: resume the session with the message as its next prompt.
+		text = board.Labeled(label, text)
 		if _, err := s.openWindow(task, text); err != nil {
+			return nil, err
+		}
+		if err := s.record(task, from, "message", text); err != nil {
 			return nil, err
 		}
 		return s.refreshed(task.ID)
 	}
+	kind := "message"
 	if isDialog(task) {
 		if text = oneLine(text); text == "" {
 			return nil, fail(400, "The message is empty")
 		}
+		text, kind = board.Labeled(label, text), "answer"
 		// A permission prompt's own typed option rejects the tool: it is never picked for a reply.
 		answered := false
 		if task.AskKind != "permission" {
@@ -1220,10 +1301,16 @@ func (s *Server) reply(r *http.Request) (any, error) {
 		if err != nil {
 			return nil, fail(502, "tmux could not deliver the answer: %v", err)
 		}
-	} else if err := s.tmux.SendText(sess.Pane, text, sess.Socket); err != nil {
-		return nil, fail(502, "tmux could not deliver the message: %v", err)
+	} else {
+		text = board.Labeled(label, text)
+		if err := s.tmux.SendText(sess.Pane, text, sess.Socket); err != nil {
+			return nil, fail(502, "tmux could not deliver the message: %v", err)
+		}
 	}
-	if err := s.st.UpdateTask(task.ID, store.Fields{"last": board.Clip("You: "+board.FirstLine(text), 100)}); err != nil {
+	if err := s.record(task, from, kind, text); err != nil {
+		return nil, err
+	}
+	if err := s.st.UpdateTask(task.ID, store.Fields{"last": board.Said(text)}); err != nil {
 		return nil, err
 	}
 	return s.refreshed(task.ID)
@@ -1316,6 +1403,14 @@ func (s *Server) keys(r *http.Request) (any, error) {
 	}
 	if err := s.tmux.SendKeys(sess.Pane, pressed, sess.Socket); err != nil {
 		return nil, fail(400, "%v", err)
+	}
+	// Keys carry no label: the record is the only trace of who pressed them.
+	from, err := s.caller(r)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.record(task, from, "keys", strings.Join(pressed, " ")); err != nil {
+		return nil, err
 	}
 	time.Sleep(300 * time.Millisecond) // let the terminal redraw before reading it back
 	return map[string]string{"screen": s.screenText(sess)}, nil

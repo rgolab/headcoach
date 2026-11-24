@@ -1,13 +1,18 @@
 package format
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/humblebundledore/headcoach/internal/api"
+	"github.com/humblebundledore/headcoach/internal/handoff"
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/humblebundledore/headcoach/internal/transcript"
 	"github.com/humblebundledore/headcoach/internal/usage"
 )
 
@@ -104,6 +109,49 @@ func TestTreeRows(t *testing.T) {
 	want := []string{"need1", "run1", "run1 a1", "run1 a2 last", "done1", "done1 a3 last"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("rows = %v", got)
+	}
+}
+
+// A task the board knows the parent of goes under it, its own child rows first, then the tasks it drives.
+func TestTreeRowsNestChildTasks(t *testing.T) {
+	boss, kid, grandkid := task("boss1", "review", 9), task("kid1", "needs", 1), task("grand1", "running", 2)
+	other, orphan := task("other1", "running", 3), task("orphan1", "done", 4)
+	kid.Parent, grandkid.Parent, orphan.Parent = "boss1", "kid1", "gone1"
+	boss.Agents = []api.Agent{{Name: "a1"}}
+	kid.Agents = []api.Agent{{Name: "a2"}}
+	// Two tasks under each other, which the daemon refuses, still show, at the end.
+	loop1, loop2 := task("loop1", "parked", 5), task("loop2", "parked", 6)
+	loop1.Parent, loop2.Parent = "loop2", "loop1"
+	var got []string
+	for _, row := range TreeRows([]api.Task{orphan, grandkid, other, kid, boss, loop1, loop2}, "state") {
+		line := fmt.Sprintf("%d %s%s %s [%s]", row.Depth, row.Tree, row.Task.ID, Drives(row.Kids), row.Team)
+		if row.Agent != nil {
+			line = fmt.Sprintf("%d %s|%s %s", row.Depth, row.Tree, Branch(row), row.Agent.Name)
+		}
+		got = append(got, line)
+	}
+	want := []string{
+		"0 other1  [other1]", "0 boss1 ▾ 1 [boss1]", "0 │|└─ a1", "1 └─ kid1 ▾ 1 [boss1]", "1    │|└─ a2", "2    └─ grand1  [boss1]",
+		"0 orphan1  [orphan1]", "0 loop1 ▾ 1 [loop1]", "1 └─ loop2 ▾ 1 [loop1]",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("rows =\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// Siblings hang off one line that stops at the last of them.
+func TestTreeRowsBranches(t *testing.T) {
+	boss, a, b, a1 := task("boss1", "running", 1), task("a1", "running", 2), task("b1", "running", 3), task("aa1", "running", 4)
+	a.Parent, b.Parent, a1.Parent = "boss1", "boss1", "a1"
+	var got []string
+	for _, row := range TreeRows([]api.Task{boss, a, b, a1}, "state") {
+		got = append(got, row.Tree+row.Task.ID)
+	}
+	if want := []string{"boss1", "├─ a1", "│  └─ aa1", "└─ b1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("tree =\n%s", strings.Join(got, "\n"))
+	}
+	if Drives(0) != "" || Drives(3) != "▾ 3" {
+		t.Errorf("Drives = %q %q", Drives(0), Drives(3))
 	}
 }
 
@@ -239,4 +287,60 @@ func TestTimed(t *testing.T) {
 			t.Errorf("Timed(%q, %d) = %q, want %q", c.title, c.left, got, c.want)
 		}
 	}
+}
+
+func TestWho(t *testing.T) {
+	for _, c := range []struct {
+		turn transcript.Turn
+		want string
+	}{
+		{transcript.Turn{Who: "you"}, "you"},
+		{transcript.Turn{Who: "agent"}, "agent"},
+		{transcript.Turn{Who: "tool"}, "tool"},
+		{transcript.Turn{Who: "something new"}, "tool"},
+		{transcript.Turn{Who: "you", From: "coordinator 1a2b3c4d"}, "coord"},
+		{transcript.Turn{Who: "you", From: "task 1a2b3c4d"}, "task"},
+		{transcript.Turn{Who: "you", From: "an agent"}, "other"},
+		{transcript.Turn{Who: "you", From: "hc"}, "hc"},
+	} {
+		if got := Who(c.turn); got != c.want {
+			t.Errorf("Who(%+v) = %q, want %q", c.turn, got, c.want)
+		}
+	}
+}
+
+func TestHandoffLines(t *testing.T) {
+	h := api.Handoff{Path: "/state/handoff/1a.md", UpdatedAt: 1000, Summary: handoff.Parse(
+		"## Status\nHalfway.\n## Waiting\n- on you: a go\n- the weather\n## Next\n- merge\n## Queue\n- [x] one\n- [ ] two\n")}
+	want := []string{
+		"handoff  /state/handoff/1a.md, written 2m ago",
+		"  status   Halfway.",
+		"  waits    on you: a go",
+		"  waits    on someone: the weather",
+		"  next     merge",
+		"  queue    1 open, 1 done, next: two",
+	}
+	if got := HandoffLines(h, time.Unix(1120, 0)); !reflect.DeepEqual(got, want) {
+		t.Errorf("HandoffLines =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestTeamCells(t *testing.T) {
+	m := api.Member{Task: api.Task{Task: store.Task{State: "needs", Ask: "Shall I?", Last: "Working."}}}
+	eq := func(got, want string) {
+		t.Helper()
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	}
+	eq(Where(m), "Shall I?")
+	m.State = "running"
+	eq(Where(m), "Working.")
+	m.Handoff.Status = "Halfway."
+	eq(Where(m), "Halfway.")
+	eq(QueueCell(handoff.Queue{}), "")
+	eq(QueueCell(handoff.Queue{Open: 2, Done: 3}), "2 open, 3 done")
+	eq(OnYouWhat(api.OnYou{Kind: "needs", What: "Shall I?"}), "asks: Shall I?")
+	eq(OnYouWhat(api.OnYou{Kind: "review", What: "PR #3"}), "in Review: PR #3")
+	eq(OnYouWhat(api.OnYou{Kind: "handoff", What: "a go"}), "a go")
 }

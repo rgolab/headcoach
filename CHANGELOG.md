@@ -4,6 +4,14 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Added
+
+- a message `hc reply` sends from inside a session starts with its sender, such as `[from task 1a2b3c4d]`, so the other session never takes it for your words; `hc show`, the detail and the web board name the sender too
+- `hc new --parent <task>`, `hc link` and `hc unlink` put a task under the one that drives it; the board, `hc ls` and the web list draw the tree in the TASK column, in a color per tree, and `self` names the task of the session hc runs in
+- a task hears from the tasks it drives without polling: when one stops in `Needs me`, `Review`, `Done` or `Parked`, the board types a line about it into the parent's session once the parent can hear it; `hc inbox` lists them
+- each task can keep a handoff file, where the work stands, outside the checkout: `hc handoff` prints it, `hc show` and the boards sum it up, and `hc reset` clears a task's context and points the fresh one at it
+- `hc team`, `w` on the board, and the web detail show what a task drives: each task under it, where it stands, and what waits on you among them
+
 ## [1.0.0] - 2026-11-23
 
 The first public release of headcoach. `hc` puts every Claude Code session on one board, in the terminal and in the browser, so you see what each agent does, what waits on you, and what it costs.

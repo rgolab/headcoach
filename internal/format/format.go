@@ -9,9 +9,11 @@ import (
 
 	"github.com/humblebundledore/headcoach/internal/api"
 	"github.com/humblebundledore/headcoach/internal/board"
+	"github.com/humblebundledore/headcoach/internal/handoff"
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/schedule"
+	"github.com/humblebundledore/headcoach/internal/transcript"
 	"github.com/humblebundledore/headcoach/internal/usage"
 )
 
@@ -108,20 +110,174 @@ type Row struct {
 	Task  *api.Task
 	Agent *api.Agent // nil on the line of the task itself
 	Last  bool       // whether the agent is the last child of its task
+	// Depth is how many parents the task has above it in the tree: 0 for a task at the top.
+	Depth int
+	// Tree is what the line starts with: the branches from the task's parents down to it, or on a child
+	// row, the lines that go on past it to the tasks below.
+	Tree string
+	// Kids is how many of the tasks listed the task drives.
+	Kids int
+	// Team is the task at the top of its tree: the task itself when no parent of it is listed.
+	Team string
 }
 
-// TreeRows flattens tasks and their child rows into lines.
+// TreeRows flattens tasks into lines: each task, its sub-agents and background jobs, then the tasks
+// it drives, in the same order. A task whose parent is not in the list goes at the top.
 func TreeRows(tasks []api.Task, by string) []Row {
 	sorted := SortTasks(tasks, by)
-	var rows []Row
+	listed := map[string]bool{}
 	for i := range sorted {
-		task := &sorted[i]
-		rows = append(rows, Row{Task: task})
-		for j := range task.Agents {
-			rows = append(rows, Row{Task: task, Agent: &task.Agents[j], Last: j == len(task.Agents)-1})
+		listed[sorted[i].ID] = true
+	}
+	children := map[string][]*api.Task{}
+	for i := range sorted {
+		if p := sorted[i].Parent; p != "" && p != sorted[i].ID && listed[p] {
+			children[p] = append(children[p], &sorted[i])
 		}
 	}
+	var rows []Row
+	placed := map[string]bool{}
+	// guide is the lines of the parents above that go on past the task; last, whether it is the last
+	// task its parent drives.
+	var add func(task *api.Task, depth int, guide string, last bool, team string)
+	add = func(task *api.Task, depth int, guide string, last bool, team string) {
+		if placed[task.ID] {
+			return
+		}
+		placed[task.ID] = true
+		if team == "" {
+			team = task.ID
+		}
+		kids := children[task.ID]
+		tree, below := guide, guide
+		if depth > 0 {
+			tree, below = guide+"├─ ", guide+"│  "
+			if last {
+				tree, below = guide+"└─ ", guide+"   "
+			}
+		}
+		rows = append(rows, Row{Task: task, Depth: depth, Tree: tree, Kids: len(kids), Team: team})
+		// Its own child rows sit between it and the tasks it drives: the line to them runs past.
+		through := below
+		if len(kids) > 0 {
+			through += "│"
+		}
+		through = strings.TrimRight(through, " ")
+		for j := range task.Agents {
+			rows = append(rows, Row{Task: task, Agent: &task.Agents[j], Last: j == len(task.Agents)-1, Depth: depth,
+				Tree: through, Team: team})
+		}
+		for j, child := range kids {
+			add(child, depth+1, below, j == len(kids)-1, team)
+		}
+	}
+	for i := range sorted {
+		if p := sorted[i].Parent; p == "" || !listed[p] {
+			add(&sorted[i], 0, "", true, "")
+		}
+	}
+	// Tasks that are each other's parents, which the daemon refuses, still show: at the top.
+	for i := range sorted {
+		add(&sorted[i], 0, "", true, "")
+	}
 	return rows
+}
+
+// Drives marks a task that drives others with how many: "▾ 2". Empty for one that drives none.
+func Drives(kids int) string {
+	if kids == 0 {
+		return ""
+	}
+	return fmt.Sprintf("▾ %d", kids)
+}
+
+// Branch is what a child row of a task starts with: the branch to its sub-agent or background job.
+func Branch(row Row) string {
+	if row.Last {
+		return "└─"
+	}
+	return "├─"
+}
+
+// Who names the author of a log turn in five characters at most: you, agent, tool, or for a message
+// the board typed for another agent, the kind of sender its label names: coord, task, other or hc.
+func Who(t transcript.Turn) string {
+	if t.From != "" {
+		switch strings.Fields(t.From)[0] {
+		case "coordinator":
+			return "coord"
+		case "task", "hc":
+			return strings.Fields(t.From)[0]
+		}
+		return "other"
+	}
+	if t.Who == "you" || t.Who == "agent" {
+		return t.Who
+	}
+	return "tool"
+}
+
+// HandoffLines sum up a task's handoff in a few lines: where it is, how old it is, then what it says.
+func HandoffLines(h api.Handoff, now time.Time) []string {
+	age := Human(max(0, int(float64(now.UnixNano())/1e9-h.UpdatedAt)))
+	out := []string{fmt.Sprintf("handoff  %s, written %s ago", h.Path, age)}
+	add := func(label, text string) { out = append(out, fmt.Sprintf("  %-9s%s", label, text)) }
+	sum := h.Summary
+	if sum.Status != "" {
+		add("status", sum.Status)
+	}
+	if len(sum.Running) > 0 {
+		add("running", strings.Join(sum.Running, "; "))
+	}
+	for _, w := range sum.Waiting {
+		on := w.On
+		if on == "" {
+			on = "someone"
+		}
+		add("waits", "on "+on+": "+w.What)
+	}
+	if len(sum.Next) > 0 {
+		add("next", strings.Join(sum.Next, "; "))
+	}
+	if queue := QueueCell(sum.Queue); queue != "" {
+		if q := sum.Queue; q.Next != "" {
+			queue += ", next: " + q.Next
+		}
+		add("queue", queue)
+	}
+	return out
+}
+
+// Where says where a task under a coordinator stands, in a line: the status of its handoff, else the
+// question it asks, else its last line.
+func Where(m api.Member) string {
+	switch {
+	case m.Handoff.Status != "":
+		return m.Handoff.Status
+	case m.State == "needs":
+		return m.Ask
+	}
+	return m.Last
+}
+
+// QueueCell counts the queue of a handoff: "2 open, 3 done", empty without one.
+func QueueCell(q handoff.Queue) string {
+	if q.Open+q.Done == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d open, %d done", q.Open, q.Done)
+}
+
+// OnYouWhat says what waits on you, after the kind of wait: a question, a change in Review, or a line of
+// a handoff file.
+func OnYouWhat(o api.OnYou) string {
+	switch o.Kind {
+	case "needs":
+		return "asks: " + o.What
+	case "review":
+		return "in Review: " + o.What
+	}
+	return o.What
 }
 
 // ContextLevel tells how full the context window is: empty, ok, warm or hot. The colours of the gauge

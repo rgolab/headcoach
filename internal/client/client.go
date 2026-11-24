@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -32,6 +33,21 @@ func (e NoAnswer) Error() string {
 	return fmt.Sprintf("The daemon at %s did not answer within %s", e.URL, e.After)
 }
 
+// Caller is what tells the daemon who runs this command: the Claude Code session and the task an
+// agent runs it from. A command you type outside a session sends none, and counts as yours.
+func Caller() map[string]string {
+	headers := map[string]string{}
+	for name, env := range map[string]string{"X-HC-Session": "CLAUDE_CODE_SESSION_ID", "X-HC-Task": "HC_TASK"} {
+		if value := os.Getenv(env); value != "" {
+			headers[name] = value
+		}
+	}
+	if os.Getenv("CLAUDECODE") != "" {
+		headers["X-HC-Agent"] = "1"
+	}
+	return headers
+}
+
 // New returns a client for the daemon at url.
 func New(url string) *Client { return &Client{URL: strings.TrimRight(url, "/")} }
 
@@ -52,6 +68,9 @@ func (c *Client) CallFor(timeout time.Duration, method, path string, in, out any
 	}
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	for name, value := range Caller() {
+		req.Header.Set(name, value)
 	}
 	resp, err := (&http.Client{Timeout: timeout}).Do(req)
 	if err != nil {

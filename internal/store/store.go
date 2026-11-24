@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     effort     TEXT NOT NULL DEFAULT '',
     schedule   TEXT NOT NULL DEFAULT '',
     hidden     INTEGER NOT NULL DEFAULT 0,
+    parent     TEXT NOT NULL DEFAULT '',
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -134,6 +135,28 @@ CREATE TABLE IF NOT EXISTS limit_samples (
     pct       REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS limit_samples_window ON limit_samples(profile, kind, resets_at);
+CREATE TABLE IF NOT EXISTS messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id     TEXT NOT NULL,
+    sender      TEXT NOT NULL DEFAULT 'you',
+    sender_task TEXT NOT NULL DEFAULT '',
+    kind        TEXT NOT NULL DEFAULT 'message',
+    text        TEXT NOT NULL DEFAULT '',
+    at          REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS messages_task ON messages(task_id);
+CREATE TABLE IF NOT EXISTS inbox (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_id    TEXT NOT NULL,
+    child_id     TEXT NOT NULL,
+    state        TEXT NOT NULL,
+    ask          TEXT NOT NULL DEFAULT '',
+    ask_kind     TEXT NOT NULL DEFAULT '',
+    last         TEXT NOT NULL DEFAULT '',
+    at           REAL NOT NULL,
+    delivered_at REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS inbox_parent ON inbox(parent_id);
 CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     at         REAL NOT NULL,
@@ -183,7 +206,9 @@ type Task struct {
 	// from before the column whose schedule ran again since.
 	Schedule string `json:"schedule"`
 	// Hidden says you hid the task from the board. Only a done task is hidden: a move clears it.
-	Hidden    bool    `json:"hidden"`
+	Hidden bool `json:"hidden"`
+	// Parent is the id of the task that drives this one, its coordinator. Empty: none.
+	Parent    string  `json:"parent"`
 	CreatedAt float64 `json:"created_at"`
 	UpdatedAt float64 `json:"updated_at"`
 }
@@ -248,6 +273,7 @@ func Open(path string) (*Store, error) {
 		{"tasks", "model", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "effort", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "schedule", "TEXT NOT NULL DEFAULT ''"},
+		{"tasks", "parent", "TEXT NOT NULL DEFAULT ''"},
 		{"schedules", "timer", "INTEGER NOT NULL DEFAULT 0"},
 		{"schedules", "model", "TEXT NOT NULL DEFAULT ''"},
 		{"schedules", "effort", "TEXT NOT NULL DEFAULT ''"},
@@ -314,14 +340,14 @@ func (s *Store) addColumn(table, column, decl string) error {
 // --- tasks ---------------------------------------------------------------------------
 
 const taskColumns = "id, title, prompt, state, cwd, repo, branch, profile, source, ask, ask_kind, last, remote," +
-	" persona, waiting, base, ends_at, model, effort, schedule, hidden, created_at, updated_at"
+	" persona, waiting, base, ends_at, model, effort, schedule, hidden, parent, created_at, updated_at"
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanTask(row scanner) (*Task, error) {
 	var t Task
 	err := row.Scan(&t.ID, &t.Title, &t.Prompt, &t.State, &t.Cwd, &t.Repo, &t.Branch, &t.Profile, &t.Source,
-		&t.Ask, &t.AskKind, &t.Last, &t.Remote, &t.Persona, &t.Waiting, &t.Base, &t.EndsAt, &t.Model, &t.Effort, &t.Schedule, &t.Hidden, &t.CreatedAt, &t.UpdatedAt)
+		&t.Ask, &t.AskKind, &t.Last, &t.Remote, &t.Persona, &t.Waiting, &t.Base, &t.EndsAt, &t.Model, &t.Effort, &t.Schedule, &t.Hidden, &t.Parent, &t.CreatedAt, &t.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -383,9 +409,9 @@ func (s *Store) CreateTask(t Task, by string) (*Task, error) {
 		t.Source = "manual"
 	}
 	_, err := s.Exec(
-		"INSERT INTO tasks ("+taskColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO tasks ("+taskColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		t.ID, t.Title, t.Prompt, t.State, t.Cwd, t.Repo, t.Branch, t.Profile, t.Source, t.Ask, t.AskKind, t.Last,
-		t.Remote, t.Persona, t.Waiting, t.Base, t.EndsAt, t.Model, t.Effort, t.Schedule, false, now, now,
+		t.Remote, t.Persona, t.Waiting, t.Base, t.EndsAt, t.Model, t.Effort, t.Schedule, false, t.Parent, now, now,
 	)
 	if err != nil {
 		return nil, err
@@ -400,7 +426,7 @@ func (s *Store) CreateTask(t Task, by string) (*Task, error) {
 var taskFields = map[string]bool{
 	"title": true, "prompt": true, "state": true, "cwd": true, "repo": true, "branch": true, "profile": true,
 	"source": true, "ask": true, "ask_kind": true, "last": true, "remote": true, "persona": true,
-	"waiting": true, "base": true, "ends_at": true, "hidden": true,
+	"waiting": true, "base": true, "ends_at": true, "hidden": true, "parent": true,
 }
 
 // UpdateTask changes some columns of a task and its updated_at. Without fields it only touches updated_at.
@@ -452,7 +478,19 @@ func (s *Store) SetState(id, state, by string, fields Fields) (bool, error) {
 	}
 	changed := task.State != state
 	if changed {
-		_, err = s.Exec("INSERT INTO history (task_id, state, at, by) VALUES (?, ?, ?, ?)", id, state, Now(), by)
+		if _, err = s.Exec("INSERT INTO history (task_id, state, at, by) VALUES (?, ?, ?, ?)", id, state, Now(), by); err != nil {
+			return changed, err
+		}
+		// The task's parent learns of it, unless the parent made the move itself.
+		if task.Parent != "" && Notified[state] && by != ByTask(task.Parent) {
+			ask, _ := set["ask"].(string)
+			askKind, _ := set["ask_kind"].(string)
+			last, ok := set["last"].(string)
+			if !ok {
+				last = task.Last
+			}
+			err = s.notify(InboxItem{ParentID: task.Parent, ChildID: id, State: state, Ask: ask, AskKind: askKind, Last: last})
+		}
 	}
 	return changed, err
 }
@@ -464,12 +502,16 @@ func (s *Store) HideTask(id string, hidden bool) error {
 	return err
 }
 
-// DeleteTask removes a task with its history and child rows. Its sessions stay, unlinked.
+// DeleteTask removes a task with its history and child rows. Its sessions stay, unlinked, and so do
+// the tasks it drove, at the top of the board.
 func (s *Store) DeleteTask(id string) error {
 	for _, stmt := range []string{
 		"DELETE FROM history WHERE task_id = ?",
+		"DELETE FROM inbox WHERE parent_id = ?1 OR child_id = ?1",
 		"DELETE FROM agents WHERE task_id = ?",
+		"DELETE FROM messages WHERE task_id = ?",
 		"UPDATE sessions SET task_id = NULL WHERE task_id = ?",
+		"UPDATE tasks SET parent = '' WHERE parent = ?",
 		"DELETE FROM tasks WHERE id = ?",
 	} {
 		if _, err := s.Exec(stmt, id); err != nil {
@@ -537,6 +579,58 @@ func (s *Store) TaskSessions(taskID string) ([]Session, error) {
 func (s *Store) LatestSession(taskID string) (*Session, error) {
 	return scanSession(s.QueryRow(
 		"SELECT "+sessionColumns+" FROM sessions WHERE task_id = ? ORDER BY started_at DESC LIMIT 1", taskID))
+}
+
+// --- messages ------------------------------------------------------------------------
+
+// Message is one message the board typed into a task's session, and who sent it.
+type Message struct {
+	ID     int64  `json:"id"`
+	TaskID string `json:"task_id"`
+	Sender string `json:"sender"` // you, task, agent or hc
+	// SenderTask is the id of the task that sent it, when Sender is task.
+	SenderTask string `json:"sender_task"`
+	// Kind is message for a prompt, answer for the answer to a dialog, keys for keys pressed.
+	Kind string  `json:"kind"`
+	Text string  `json:"text"`
+	At   float64 `json:"at"`
+}
+
+// messagesKept is how many messages the board keeps per task.
+const messagesKept = 500
+
+// AddMessage records a message the board typed into a task's session, and trims the task's oldest.
+func (s *Store) AddMessage(m Message) error {
+	if m.At == 0 {
+		m.At = Now()
+	}
+	_, err := s.Exec("INSERT INTO messages (task_id, sender, sender_task, kind, text, at) VALUES (?, ?, ?, ?, ?, ?)",
+		m.TaskID, m.Sender, m.SenderTask, m.Kind, m.Text, m.At)
+	if err != nil {
+		return err
+	}
+	_, err = s.Exec("DELETE FROM messages WHERE task_id = ? AND id <= (SELECT id FROM messages WHERE task_id = ?"+
+		" ORDER BY id DESC LIMIT 1 OFFSET ?)", m.TaskID, m.TaskID, messagesKept)
+	return err
+}
+
+// Messages lists the messages typed into a task's session, oldest first.
+func (s *Store) Messages(taskID string) ([]Message, error) {
+	rows, err := s.Query("SELECT id, task_id, sender, sender_task, kind, text, at FROM messages WHERE task_id = ? ORDER BY id",
+		taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.TaskID, &m.Sender, &m.SenderTask, &m.Kind, &m.Text, &m.At); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 // --- events --------------------------------------------------------------------------

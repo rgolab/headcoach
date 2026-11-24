@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode/utf8"
 
 	"github.com/humblebundledore/headcoach/internal/api"
 	"github.com/humblebundledore/headcoach/internal/board"
@@ -111,12 +112,19 @@ func init() {
 			{name: "timer", value: true, help: "close the task once this long has passed, e.g. 10m or 1h30m, whatever it is doing"},
 			{name: "model", value: true, help: "model to start Claude Code on, e.g. sonnet (default: the profile's)"},
 			{name: "effort", value: true, help: "effort level: " + efforts + " (default: the profile's)"},
+			{name: "parent", value: true, help: "the task that drives this one; self is the task of the session hc runs in"},
 		}},
+		{name: "link", args: task + " <parent>", help: "put a task under the one that drives it; self is the task of the session hc runs in", min: 2, max: 2, run: cmdLink},
+		{name: "unlink", args: task, help: "take a task from under its parent", min: 1, max: 1, run: cmdUnlink},
+		{name: "handoff", args: "[init | path] [" + task + "]", help: "print a task's handoff file; init writes the template, path prints where it goes (default: self)", max: 2, run: cmdHandoff, flags: []flag{jsonFlag}},
+		{name: "reset", args: task, help: "clear a task's context between two turns, and point the fresh one at its handoff", min: 1, max: 1, run: cmdReset},
+		{name: "team", args: "[" + task + "]", help: "a coordinator's view: the tasks it drives, where each stands, and what waits on you (default: self)", max: 1, run: cmdTeam, flags: []flag{jsonFlag}},
+		{name: "inbox", args: "[" + task + "]", help: "what a task heard from the tasks it drives, and what waits to be said (default: self)", max: 1, run: cmdInbox, flags: []flag{jsonFlag}},
 		{name: "review", help: "list the tasks in Review, the one waiting longest first, with their change", run: cmdReview, flags: []flag{jsonFlag}},
 		{name: "start", args: task, help: "start or resume a task in a new tmux window", min: 1, max: 1, run: cmdStart},
 		{name: "attach", args: task, help: "enter a task's session from this terminal; Ctrl-] comes back", min: 1, max: 1, run: cmdAttach},
 		{name: "ask", args: task + " [question]...", help: "ask about a task without touching its session; no question means a summary", min: 1, max: -1, run: cmdAsk},
-		{name: "reply", args: task + " <text>...", help: "send a message to a task's session, or the answer to its question", min: 2, max: -1, run: cmdReply},
+		{name: "reply", args: task + " <text>...", help: "send a message to a task's session, or the answer to its question; from a session, it names its sender", min: 2, max: -1, run: cmdReply},
 		{name: "timer", args: task + " <duration|off>", help: "close a task once this long has passed from now, e.g. 10m; off removes its timer", min: 2, max: 2, run: cmdTimer},
 		{name: "move", args: task + " <state>", help: "move a task to another state: " + stateNames(), min: 2, max: -1, run: cmdMove},
 		{name: "adopt", args: task, help: "move a session from your tmux into the board's own tmux", min: 1, max: 1, run: cmdAdopt},
@@ -354,17 +362,20 @@ func cmdLs(e *env, p parsed) error {
 		e.printf("No open tasks. Start a Claude session, or add one with: hc new\n")
 		return nil
 	}
-	const columns = "%-9s %-9s %-8s %-6s %-6s %-26s %-16s %-4s %6s %6s %9s %6s %6s %6s %6s %5s %-8s  "
-	e.printf("%s\n", e.paint(fmt.Sprintf(columns+"TITLE", "TASK", "STATE", "PROFILE", "MODEL", "EFFORT", "PERSONA", "REPO", "TMUX", "AGE", "IDLE", "CTX", "IN", "OUT", "CACHE", "COST", "⏱", "↻"), "dim"))
-	for _, row := range format.TreeRows(tasks, by) {
+	const columns = "%-9s %-8s %-6s %-6s %-26s %-16s %-4s %6s %6s %9s %6s %6s %6s %6s %5s %-8s  "
+	rows := format.TreeRows(tasks, by)
+	// The TASK column grows with the tree: the branches down to a task, and how many it drives.
+	width := 9
+	for _, row := range rows {
+		width = max(width, utf8.RuneCountInString(taskCell(row)))
+	}
+	e.printf("%s\n", e.paint(fmt.Sprintf("%-*s "+columns+"TITLE", width, "TASK", "STATE", "PROFILE", "MODEL", "EFFORT", "PERSONA", "REPO", "TMUX", "AGE", "IDLE", "CTX", "IN", "OUT", "CACHE", "COST", "⏱", "↻"), "dim"))
+	for _, row := range rows {
 		t := row.Task
 		if a := row.Agent; a != nil {
-			branch := "├─"
-			if row.Last {
-				branch = "└─"
-			}
+			branch := format.Branch(row)
 			in, out, cache := format.TokenCells(a.Tokens)
-			line := fmt.Sprintf(columns+"%s %s: %s", "", store.StateName(a.State), "", "", "", cut(a.Persona, 26), "", "", format.Human(a.Age), "", "", in, out, cache, "", "", "", branch, a.Name, a.Desc)
+			line := fmt.Sprintf("%-*s "+columns+"%s %s: %s", width, row.Tree, store.StateName(a.State), "", "", "", cut(a.Persona, 26), "", "", format.Human(a.Age), "", "", in, out, cache, "", "", "", branch, a.Name, a.Desc)
 			e.printf("%s\n", e.paint(line, "dim"))
 			continue
 		}
@@ -380,14 +391,14 @@ func cmdLs(e *env, p parsed) error {
 		timer := orDash(format.TimerCell(t.TimerLeft))
 		schedule := orDash(format.ScheduleCell(t.Schedule))
 		in, out, cache := format.TokenCells(&t.Tokens)
-		e.printf("%-9s %s %-8s %-6s %-6s %-26s %-16s %-4s %6s %6s %s %6s %6s %6s %6s %5s %-8s  %s%s\n",
-			t.Short, e.paint(fmt.Sprintf("%-9s", t.StateName), t.State), cut(profile, 8), cut(model, 6), cut(effort, 6), cut(persona, 26), cut(t.Repo, 16), where,
+		e.printf("%-*s %s %-8s %-6s %-6s %-26s %-16s %-4s %6s %6s %s %6s %6s %6s %6s %5s %-8s  %s%s\n",
+			width, taskCell(row), e.paint(fmt.Sprintf("%-9s", t.StateName), t.State), cut(profile, 8), cut(model, 6), cut(effort, 6), cut(persona, 26), cut(t.Repo, 16), where,
 			format.Human(t.Age), format.Human(t.Idle),
 			e.paint(fmt.Sprintf("%9s", format.ContextCell(t.Context)), format.ContextLevel(t.Context)),
 			in, out, cache, format.Money(t.Cost), timer,
 			schedule, t.Title, closed)
 		if t.State == "needs" {
-			e.printf("%s\n", e.paint(fmt.Sprintf("%-158s? %s", "", t.Ask), "needs"))
+			e.printf("%s\n", e.paint(fmt.Sprintf("%-*s? %s", 149+width, "", t.Ask), "needs"))
 		}
 	}
 	if len(board.Limits) > 0 {
@@ -416,11 +427,15 @@ func cmdShow(e *env, p parsed) error {
 	persona := orDash(t.Persona)
 	where := orDash(map[string]string{"hc": "the board's own tmux, Ctrl-] detaches", "own": "your tmux"}[t.Tmux])
 	e.printf("%s\n\n", t.Title)
-	for _, line := range [][2]string{
+	lines := [][2]string{
 		{"task", t.ID}, {"state", state}, {"repo", t.Repo}, {"branch", t.Branch}, {"dir", t.Cwd},
 		{"tmux", where}, {"profile", t.Profile}, {"model", orDefault(t.Model)}, {"effort", orDefault(t.Effort)},
-		{"persona", persona}, {"resume", t.Resume},
-	} {
+		{"persona", persona},
+	}
+	if t.Parent != "" {
+		lines = append(lines, [2]string{"parent", board.Short(t.Parent)})
+	}
+	for _, line := range append(lines, [2]string{"resume", t.Resume}) {
 		e.printf("  %-8s %s\n", line[0], line[1])
 	}
 	if t.Context.Tokens > 0 {
@@ -436,6 +451,12 @@ func cmdShow(e *env, p parsed) error {
 	if t.State == "needs" {
 		e.printf("\n  needs you: %s\n", t.Ask)
 	}
+	if t.Detail != nil && t.Handoff != nil && t.Handoff.Text != "" {
+		e.printf("\n")
+		for _, line := range format.HandoffLines(*t.Handoff, time.Now()) {
+			e.printf("  %s\n", line)
+		}
+	}
 	for _, a := range t.Agents {
 		kind := "sub-agent"
 		if a.Name == "command" || a.Name == "monitor" {
@@ -450,11 +471,7 @@ func cmdShow(e *env, p parsed) error {
 	var log []string
 	if t.Detail != nil {
 		for _, turn := range transcript.Window(t.Log, turns) {
-			who := map[string]string{"you": "you  ", "agent": "agent"}[turn.Who]
-			if who == "" {
-				who = "tool "
-			}
-			log = append(log, who+" | "+strings.ReplaceAll(turn.Text, "\n", "\n      | "))
+			log = append(log, fmt.Sprintf("%-5s", format.Who(turn))+" | "+strings.ReplaceAll(turn.Text, "\n", "\n      | "))
 			if gap := turn.Gap(); gap != "" {
 				log = append(log, "      | "+gap)
 			}
@@ -525,8 +542,10 @@ func cmdNew(e *env, p parsed) error {
 	data := map[string]any{
 		"prompt": strings.Join(p.args, " "), "title": p.get("title", ""), "cwd": dir, "start": p.has("start"),
 	}
-	if profile := p.get("profile", ""); profile != "" {
-		data["profile"] = profile
+	for _, name := range []string{"profile", "parent"} {
+		if value := p.get(name, ""); value != "" {
+			data[name] = value
+		}
 	}
 	if p.has("timer") {
 		timer, err := parseTimer(p.get("timer", ""))
@@ -625,6 +644,159 @@ func cmdMove(e *env, p parsed) error {
 	}
 	e.printf("%s  %s  %s\n", t.Short, t.StateName, t.Title)
 	return nil
+}
+
+func cmdLink(e *env, p parsed) error {
+	t, err := e.client.Do("PATCH", "/api/tasks/"+p.args[0], map[string]string{"parent": p.args[1]})
+	if err != nil {
+		return err
+	}
+	e.printf("%s  now under %s\n", t.Short, board.Short(t.Parent))
+	return nil
+}
+
+func cmdUnlink(e *env, p parsed) error {
+	t, err := e.client.Do("PATCH", "/api/tasks/"+p.args[0], map[string]string{"parent": ""})
+	if err != nil {
+		return err
+	}
+	e.printf("%s  now at the top of the board\n", t.Short)
+	return nil
+}
+
+// taskCell is a task in the TASK column: the branches of the tree down to it, its id, and how many
+// tasks it drives.
+func taskCell(row format.Row) string {
+	if row.Agent != nil {
+		return row.Tree
+	}
+	cell := row.Tree + row.Task.Short
+	if drives := format.Drives(row.Kids); drives != "" {
+		cell += " " + drives
+	}
+	return cell
+}
+
+func cmdInbox(e *env, p parsed) error {
+	id := "self"
+	if len(p.args) > 0 {
+		id = p.args[0]
+	}
+	var inbox api.Inbox
+	if err := e.client.Call("GET", "/api/tasks/"+id+"/inbox", nil, &inbox); err != nil {
+		return err
+	}
+	if p.has("json") {
+		return e.json(inbox)
+	}
+	if len(inbox.Items) == 0 {
+		e.printf("Nothing from the tasks under %s yet.\n", board.Short(inbox.Task))
+		return nil
+	}
+	now := store.Now()
+	for _, it := range inbox.Items {
+		status, at := "waiting", it.At
+		if it.DeliveredAt > 0 {
+			status, at = "sent", it.DeliveredAt
+		}
+		title := it.ChildTitle
+		if title == "" {
+			title = "(deleted)"
+		}
+		e.printf("%-7s %5s  %-8s  %s: %s\n", status, format.Human(int(now-at)), it.ChildShort, cut(title, 40), it.News)
+	}
+	return nil
+}
+
+func cmdHandoff(e *env, p parsed) error {
+	action, args := "", p.args
+	if len(args) > 0 && (args[0] == "init" || args[0] == "path") {
+		action, args = args[0], args[1:]
+	}
+	if len(args) > 1 {
+		return usageError{"hc handoff [init | path] [<task>]"}
+	}
+	id := "self"
+	if len(args) > 0 {
+		id = args[0]
+	}
+	var (
+		h    api.Handoff
+		err  error
+		path = "/api/tasks/" + id + "/handoff"
+	)
+	if action == "init" {
+		err = e.client.Call("POST", path, map[string]bool{"init": true}, &h)
+	} else {
+		err = e.client.Call("GET", path, nil, &h)
+	}
+	if err != nil {
+		return err
+	}
+	switch {
+	case p.has("json"):
+		return e.json(h)
+	case action != "":
+		e.printf("%s\n", h.Path)
+	case h.Text == "":
+		e.printf("No handoff yet. Write one at %s, or start from the template: hc handoff init %s\n", h.Path, id)
+	default:
+		e.printf("%s\n", strings.TrimRight(h.Text, "\n"))
+	}
+	return nil
+}
+
+func cmdReset(e *env, p parsed) error {
+	var t api.Task
+	if err := e.client.CallFor(30*time.Second, "POST", "/api/tasks/"+p.args[0]+"/reset", nil, &t); err != nil {
+		return err
+	}
+	e.printf("%s  cleared, and pointed at its handoff\n", t.Short)
+	return nil
+}
+
+func cmdTeam(e *env, p parsed) error {
+	id := "self"
+	if len(p.args) > 0 {
+		id = p.args[0]
+	}
+	var team api.Team
+	if err := e.client.Call("GET", "/api/tasks/"+id+"/team", nil, &team); err != nil {
+		return err
+	}
+	if p.has("json") {
+		return e.json(team)
+	}
+	t := team.Task
+	e.printf("%s  %s  %s\n", t.Short, e.paint(t.StateName, t.State), t.Title)
+	if team.Handoff.Status != "" {
+		e.printf("  %s\n", team.Handoff.Status)
+	}
+	if len(team.OnYou) > 0 {
+		e.printf("\n%s\n", e.paint("Waits on you", "needs"))
+		for _, o := range team.OnYou {
+			e.printf("  %-8s  %-30s  %s\n", o.Short, cut(o.Title, 30), format.OnYouWhat(o))
+		}
+	}
+	if len(team.Members) == 0 {
+		e.printf("\nNo task under it. Put one there with: hc new --parent %s, or hc link <task> %s\n", t.Short, t.Short)
+		return nil
+	}
+	width := 8
+	for _, m := range team.Members {
+		width = max(width, utf8.RuneCountInString(memberCell(m)))
+	}
+	e.printf("\n%s\n", e.paint(fmt.Sprintf("%-*s  %-9s %5s  %-16s  %-40s  %s", width, "TASK", "STATE", "IDLE", "QUEUE", "TITLE", "WHERE IT STANDS"), "dim"))
+	for _, m := range team.Members {
+		e.printf("%-*s  %s %5s  %-16s  %-40s  %s\n", width, memberCell(m), e.paint(fmt.Sprintf("%-9s", m.StateName), m.State),
+			format.Human(m.Idle), orDash(format.QueueCell(m.Handoff.Queue)), cut(m.Title, 40), cut(format.Where(m), 100))
+	}
+	return nil
+}
+
+// memberCell is a task of a team in the TASK column, as taskCell draws it on the board.
+func memberCell(m api.Member) string {
+	return taskCell(format.Row{Task: &m.Task, Tree: m.Tree, Kids: m.Kids})
 }
 
 func cmdStart(e *env, p parsed) error {

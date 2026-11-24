@@ -24,6 +24,7 @@ The same board in the browser:
 - any other finished turn goes to `Done`; an open board lights the task up green for a few seconds, then greys it
 - each task shows its context window, its tokens and its cost at API prices
 - sub-agents and background commands show up under their task
+- a task can drive other tasks: they show up under it, see [Coordinators](#coordinators)
 - a session or a sub-agent that loads a persona skill, such as `/reviewer`, shows it in the PERSONA column
 - the top of the board shows how much of your 5 hour and 7 day limits is used, see [Limits and cost](#limits-and-cost)
 - you enter a session with one key, leave it with another, and it keeps running
@@ -77,6 +78,7 @@ Then:
 | `A` | adopt a session from your own tmux |
 | `S` | schedules |
 | `R` | review queue: what waits on you in Review, `o` opens its pull request or its diff |
+| `w` | coordinator view: the tasks this one drives, or its parent drives, where each stands, and what waits on you; `enter` shows one on the board |
 | `C` | columns: `space` shows or hides one, `J` and `K` move it, `r` goes back to the default; the board keeps them after a restart |
 | `s` | start or resume |
 | `p` | park: close the session, keep it for later |
@@ -99,13 +101,17 @@ Then:
 - `hc new -s "<prompt>"` starts a session in the current directory
 - `hc attach <id>` enters a session
 - `hc ask <id> ["<question>"]` answers a question about a session, or summarises it
-- `hc reply <id> "<text>"` sends a message to a session
+- `hc reply <id> "<text>"` sends a message to a session; from another session, it says who sent it, see [Coordinators](#coordinators)
 - on a question, `hc reply` types the answer in its "Type something" option and submits it; a dialog without one refuses it
 - a dialog of several questions takes one reply per question, then its own submit step: `hc keys <id> Enter`
 - `hc keys <id> <key>...` presses keys to answer a dialog, such as `Down Enter`
 - `hc show <id>` prints a session and the end of its log
 - `hc new --timer 10m "<prompt>"` gives a task a timer, see [Timers](#timers)
 - `hc new --model sonnet --effort low "<prompt>"` picks the model and the effort level, see [Model and effort](#model-and-effort)
+- `hc new --parent <id> "<prompt>"`, `hc link <id> <parent>` and `hc unlink <id>` put a task under the one that drives it, see [Coordinators](#coordinators)
+- `hc inbox [<id>]` lists what a task heard from the tasks it drives
+- `hc handoff [init | path] [<id>]` prints a task's handoff file, `hc reset <id>` starts it again from there
+- `hc team [<id>]` shows the tasks a task drives, where each stands, and what waits on you among them
 - `hc move <id> <state>` moves a session, the state as the board shows it, `Running` or `Needs me`, and `Parked` closes it
 - `hc adopt <id>` moves a session from your tmux into the board's
 - `hc limits` shows each limit and when it resets
@@ -183,6 +189,45 @@ Then:
 - the queue asks `gh` or `glab` about a pull request only while it is open, at most every 2 minutes
 - the last line: how long a task waited in Review on average, and the average cost of a task Done, over 7 days
 
+## Coordinators
+
+- a task can drive other tasks: it briefs them with `hc new`, relays decisions with `hc reply`, and reads them with `hc show`
+- `hc new --parent <task> "<prompt>"` puts the new task under the one that drives it; `--parent self` is the task of the session hc runs in
+- `hc link <task> <parent>` puts a task already there under another one, `hc unlink <task>` takes it out
+- a task has one parent at most, and a parent can be any task; a loop is refused
+- the board, `hc ls` and the web list draw the tree in the TASK column: a parent says how many tasks it drives, `▾ 2`, and each one hangs under it, after the parent's sub-agents, on a `├─` or `└─` branch
+- each tree takes a color of its own, picked from the task at its top, on the board and on the web board
+- a card of the web board names its parent with a `↳` tag, and a parent card says how many tasks it drives with a `▾` tag, in the color of their tree
+- `self` works wherever a command takes a task, from inside a session: `hc show self`
+- a parent hears from its children without polling: when a child stops in `Needs me`, `Review`, `Done` or `Parked`, the board types one line about it into the parent's session, after `[from hc]`
+- the line says what the child asks, or its last words: `- 1a2b3c4d "Fix login" is in Review: pushed, PR #12 open`
+- a child has to stay put 10 seconds first, so a permission prompt answered at once is no news
+- a newer state replaces an older one not said yet, and a child back at work by then says nothing
+- a move the parent made itself, such as `hc move <child> done`, is no news to it
+- the board waits until the parent can hear: its turn is over, or it only waits on its own jobs, and its prompt is on screen
+- it never types while the parent works, waits on you, shows a dialog, or has words in its prompt; a suggestion Claude Code draws there does not count
+- it types into a parent once a minute at most, all its children's news in one message, and never opens a session for it
+- `hc inbox [<task>]` lists what a task heard and what waits to be said, the calling task by default
+- the history of a task names the task that moved it: `by task 1a2b3c4d`
+- each task can keep a handoff file: where the work stands, written so that a fresh context, or the task driving it, can pick it up
+- it lives next to the board's database, never in the checkout: `hc handoff path` prints where, and a session the board starts finds it in `HC_HANDOFF`
+- `hc handoff init` writes a template, `hc handoff [<task>]` prints it, the calling task by default; the agent keeps it up to date with its own tools
+- its sections, each optional: `## Status`, `## Running`, `## Waiting` with one `- on <who>: <what>` line each, `## Next`, and a `## Queue` of `- [ ]` and `- [x]` items
+- `<who>` is `you`, a task id, or anything else such as `ci`; HTML comments are guidance and never count
+- `hc show`, the detail and the web board sum it up: its status, what waits on whom, what is next, and the queue
+- `hc reset <task>` clears a task's context between two turns, then points the fresh one at its handoff; it refuses while the task works, and without a handoff that says something
+- `hc team [<task>]` is a coordinator's view: the tasks under it at any depth, their state, their queue, and where each stands, the calling task by default
+- it lists first what waits on you among them: a question, a change in `Review`, or a `- on you:` line of a handoff, the coordinator's own included
+- `w` on the board opens the same view for the task under the cursor, or for its parent when it drives none; the web board shows it in the detail of a task that drives others
+- `hc reply` from inside a session puts its sender before the message: `[from task 1a2b3c4d] stop`, so the other session never takes it for your words
+- `hc new` from inside a session does the same to the task's first prompt
+- a slash command keeps its place and the label goes before its arguments; a bare one such as `/compact` has none
+- your own messages, sent from a board or from a shell outside any session, carry no label
+- hc tells an agent from you by what Claude Code and the board put in a session's environment: `CLAUDE_CODE_SESSION_ID`, `CLAUDECODE` and `HC_TASK`
+- the last line on the board, `hc show`, the detail and the web board name the sender of each labeled message: `coord`, `task`, `other` or `hc`
+- `hc keys` cannot carry a label: the board records who pressed them
+- the label keeps honest agents apart, not hostile ones: anything on the machine can reach the daemon
+
 ## From your phone
 
 - the daemon listens on `127.0.0.1` only: nothing outside the computer reaches it
@@ -255,6 +300,7 @@ Then:
 - `internal/store`: the SQLite storage
 - `internal/review`: what the review queue reads from transcripts, git and the forge
 - `internal/schedule`: when a schedule runs next
+- `internal/handoff`: what the board reads from a task's handoff file
 - `internal/usage` and `internal/limits`: tokens, cost and the usage limits
 - `internal/api` and `internal/client`: the JSON shapes of the API, and its client
 - `internal/server`: the daemon, its JSON API and the web board

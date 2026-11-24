@@ -55,10 +55,11 @@ func (f *fakeTmux) err() error {
 	return nil
 }
 
-func (f *fakeTmux) Installed() bool                     { return f.installed }
-func (f *fakeTmux) Available() bool                     { return f.available }
-func (f *fakeTmux) Panes(socket string) map[string]bool { return f.panes(socket) }
-func (f *fakeTmux) Capture(pane, socket string) string  { return f.screen }
+func (f *fakeTmux) Installed() bool                          { return f.installed }
+func (f *fakeTmux) Available() bool                          { return f.available }
+func (f *fakeTmux) Panes(socket string) map[string]bool      { return f.panes(socket) }
+func (f *fakeTmux) Capture(pane, socket string) string       { return f.screen }
+func (f *fakeTmux) CaptureStyled(pane, socket string) string { return f.screen }
 func (f *fakeTmux) RenameWindow(pane, name, socket string) {
 	f.renamed = append(f.renamed, pane+"|"+name)
 }
@@ -155,6 +156,7 @@ func build(t *testing.T, private bool) *fixture {
 	f.srv = New(cfg, st, f.tmux)
 	f.prs = map[string]review.PR{}
 	f.srv.PRState = func(url string) review.PR { return f.prs[url] }
+	f.srv.clearWait = 0
 	f.srv.Ask = func(launcher, model, prompt, cwd string) (string, error) {
 		t.Error("a test ran the real Claude Code")
 		return "", nil
@@ -344,4 +346,14 @@ func shellWords(t *testing.T, command string) []string {
 	}
 	words := strings.Split(out, "\x00")
 	return words[:len(words)-1]
+}
+
+// newTask2 adds a task to the backlog and returns the answer, whatever its status.
+func (f *fixture) newTask2(extra obj) response {
+	f.t.Helper()
+	data := obj{"prompt": "do the thing", "cwd": f.tmp}
+	for k, v := range extra {
+		data[k] = v
+	}
+	return f.post("/api/tasks", data)
 }

@@ -36,6 +36,7 @@ func (f *fakeTmux) Available() bool                                     { return
 func (f *fakeTmux) Panes(socket string) map[string]bool                 { return f.panes }
 func (f *fakeTmux) RenameWindow(pane, name, socket string)              {}
 func (f *fakeTmux) Capture(pane, socket string) string                  { return "the screen\n" }
+func (f *fakeTmux) CaptureStyled(pane, socket string) string            { return "the screen\n" }
 func (f *fakeTmux) KillPane(pane, socket string)                        { delete(f.panes, pane) }
 func (f *fakeTmux) SendKeys(pane string, keys []string, s string) error { return tmux.CheckKeys(keys) }
 func (f *fakeTmux) TypeText(pane, text, socket string) error            { return nil }
@@ -73,7 +74,8 @@ func newFixture(t *testing.T) *fixture {
 	t.Setenv("HC_DATA_DIR", filepath.Join(tmp, "data"))
 	t.Setenv("HC_CONFIG", filepath.Join(tmp, "config.toml"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdg"))
-	for _, name := range []string{"HC_URL", "HC_PORT", "HC_DB", "HC_TASK", "CLAUDE_CONFIG_DIR", "NO_COLOR"} {
+	for _, name := range []string{"HC_URL", "HC_PORT", "HC_DB", "HC_TASK", "CLAUDE_CONFIG_DIR", "NO_COLOR",
+		"CLAUDECODE", "CLAUDE_CODE_SESSION_ID"} {
 		t.Setenv(name, "")
 	}
 	st, err := store.Open(":memory:")
@@ -195,6 +197,157 @@ func TestLs(t *testing.T) {
 	}
 	if code, _, errOut := f.hc("ls", "--sort", "size"); code != 2 || !strings.Contains(errOut, "cannot sort by 'size'") {
 		t.Errorf("a bad sort gave %d %q", code, errOut)
+	}
+}
+
+// A reply an agent sends from its session reaches the other task with a label, and show names the sender.
+func TestReplyFromAnotherTask(t *testing.T) {
+	f := newFixture(t)
+	f.tmux.panes["%2"] = true
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "fix it"})
+	f.hook("UserPromptSubmit", "c0ffee00-s2", "%2", map[string]any{"prompt": "coordinate"})
+	t.Setenv("CLAUDECODE", "1")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "c0ffee00-s2")
+	f.ok("reply", "abcd", "stop", "there")
+	if len(f.tmux.sent) != 1 || f.tmux.sent[0] != "%1|[from task c0ffee00] stop there" {
+		t.Errorf("sent %q", f.tmux.sent)
+	}
+	transcript := filepath.Join(f.tmp, "s1.jsonl")
+	os.WriteFile(transcript, []byte(`{"type": "user", "message": {"content": "fix it"}}
+{"type": "user", "message": {"content": "[from task c0ffee00] stop there"}}
+`), 0o644)
+	f.hook("Stop", "abcd1234-s1", "%1", map[string]any{"transcript_path": transcript, "last_assistant_message": "Stopped."})
+	if out := f.ok("show", "abcd"); !strings.Contains(out, "\nyou   | fix it\ntask  | [from task c0ffee00] stop there\n") {
+		t.Errorf("show does not name the sender:\n%s", out)
+	}
+}
+
+// hc new --parent, hc link and hc unlink put a task under another one, and hc ls prints the tree.
+func TestLinks(t *testing.T) {
+	f := newFixture(t)
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "coordinate"})
+	out := f.ok("new", "-t", "Child", "--parent", "abcd", "do it")
+	child := strings.Fields(out)[0]
+	f.ok("new", "-t", "Other", "do that")
+	ls := f.ok("ls")
+	// The tree hangs in the TASK column: the parent says how many tasks it drives, its child branches off.
+	if !strings.Contains(ls, "\nabcd1234 ▾ 1 Running ") || !strings.Contains(ls, "\n└─ "+child+"  Backlog ") ||
+		!strings.Contains(ls, "  Child\n") || !strings.Contains(ls, "  Other\n") {
+		t.Errorf("ls does not nest the child:\n%s", ls)
+	}
+	if i, j := strings.Index(ls, "abcd1234 ▾ 1"), strings.Index(ls, "└─ "+child); i < 0 || j < i {
+		t.Errorf("the child is not under its parent:\n%s", ls)
+	}
+	if out := f.ok("show", child); !strings.Contains(out, "  parent   abcd1234\n") {
+		t.Errorf("show lacks the parent:\n%s", out)
+	}
+	if out := f.ok("unlink", child); out != child+"  now at the top of the board\n" {
+		t.Errorf("unlink printed %q", out)
+	}
+	if out := f.ok("link", child, "abcd"); out != child+"  now under abcd1234\n" {
+		t.Errorf("link printed %q", out)
+	}
+	if code, _, errOut := f.hc("link", "abcd", child); code == 0 || !strings.Contains(errOut, "cannot be under itself") {
+		t.Errorf("a loop: %d %s", code, errOut)
+	}
+	// From inside the parent's session, self names it.
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "abcd1234-s1")
+	out = f.ok("new", "-t", "Mine", "--parent", "self", "mine")
+	var detail api.Task
+	if err := json.Unmarshal([]byte(f.ok("show", "--json", strings.Fields(out)[0])), &detail); err != nil || detail.Parent != "abcd1234-s1" {
+		t.Errorf("--parent self: %+v %v", detail.Parent, err)
+	}
+}
+
+// hc inbox lists what a task heard from the tasks it drives, and what waits to be said.
+func TestInbox(t *testing.T) {
+	f := newFixture(t)
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "coordinate"})
+	if out := f.ok("inbox", "abcd"); out != "Nothing from the tasks under abcd1234 yet.\n" {
+		t.Errorf("empty inbox: %q", out)
+	}
+	child := strings.Fields(f.ok("new", "-t", "Child", "--parent", "abcd", "do it"))[0]
+	f.ok("move", child, "review")
+	out := f.ok("inbox", "abcd")
+	if !strings.HasPrefix(out, "waiting ") || !strings.Contains(out, child+"  Child: is in Review: Moved by your user\n") {
+		t.Errorf("inbox = %q", out)
+	}
+	if code, _, errOut := f.hc("inbox"); code == 0 || !strings.Contains(errOut, "self names the task") {
+		t.Errorf("inbox outside a session: %d %s", code, errOut)
+	}
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "abcd1234-s1")
+	if got := f.ok("inbox"); got != out {
+		t.Errorf("inbox from the parent's session = %q", got)
+	}
+}
+
+// hc team shows the tasks under a task, where each stands, and what waits on you among them.
+func TestTeam(t *testing.T) {
+	f := newFixture(t)
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "coordinate"})
+	if out := f.ok("team", "abcd"); !strings.Contains(out, "No task under it. Put one there with: hc new --parent abcd1234") {
+		t.Errorf("an empty team: %q", out)
+	}
+	child := strings.Fields(f.ok("new", "-t", "Child", "--parent", "abcd", "do it"))[0]
+	grandchild := strings.Fields(f.ok("new", "-t", "Grandchild", "--parent", child, "do that"))[0]
+	f.ok("move", grandchild, "review")
+	path := strings.TrimSpace(f.ok("handoff", "path", child))
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	os.WriteFile(path, []byte("## Status\nHalfway.\n## Waiting\n- on you: a go\n## Queue\n- [x] one\n- [ ] two\n"), 0o644)
+	out := f.ok("team", "abcd")
+	for _, piece := range []string{
+		"abcd1234  Running  coordinate\n",
+		"Waits on you\n  " + child + "  Child                           a go\n  " + grandchild + "  Grandchild                      in Review: Moved by you\n",
+		"\n" + child + " ▾ 1  Backlog    ", "s  1 open, 1 done    Child                                     Halfway.\n",
+		"\n└─ " + grandchild + "   Review     ", "s  -                 Grandchild                                Moved by you\n",
+	} {
+		if !strings.Contains(out, piece) {
+			t.Errorf("team lacks %q:\n%s", piece, out)
+		}
+	}
+	// From inside the coordinator's session, it is the default.
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "abcd1234-s1")
+	if got := f.ok("team"); got != out {
+		t.Errorf("team from the session = %q", got)
+	}
+	var team api.Team
+	if err := json.Unmarshal([]byte(f.ok("team", "--json")), &team); err != nil || len(team.Members) != 2 || team.Members[1].Depth != 1 {
+		t.Errorf("--json: %+v %v", team, err)
+	}
+}
+
+// hc handoff prints a task's handoff, init writes the template, path says where it goes; show sums it up.
+func TestHandoff(t *testing.T) {
+	f := newFixture(t)
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "fix it"})
+	path := strings.TrimSpace(f.ok("handoff", "path", "abcd"))
+	if !strings.HasSuffix(path, "/handoff/abcd1234-s1.md") {
+		t.Errorf("path = %q", path)
+	}
+	if out := f.ok("handoff", "abcd"); !strings.HasPrefix(out, "No handoff yet. Write one at "+path) {
+		t.Errorf("no handoff: %q", out)
+	}
+	if out := f.ok("handoff", "init", "abcd"); out != path+"\n" {
+		t.Errorf("init printed %q", out)
+	}
+	os.WriteFile(path, []byte("# Handoff\n## Status\nHalfway.\n## Waiting\n- on you: a go\n"), 0o644)
+	if out := f.ok("handoff", "abcd"); out != "# Handoff\n## Status\nHalfway.\n## Waiting\n- on you: a go\n" {
+		t.Errorf("handoff = %q", out)
+	}
+	out := f.ok("show", "abcd")
+	for _, piece := range []string{"\n  handoff  " + path + ", written ", "\n    status   Halfway.\n    waits    on you: a go\n"} {
+		if !strings.Contains(out, piece) {
+			t.Errorf("show lacks %q:\n%s", piece, out)
+		}
+	}
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "abcd1234-s1")
+	if got := strings.TrimSpace(f.ok("handoff", "path")); got != path {
+		t.Errorf("path from the task's session = %q", got)
+	}
+	// A reset between two turns needs the prompt on screen; the stand-in tmux shows none.
+	f.hook("Stop", "abcd1234-s1", "%1", map[string]any{"last_assistant_message": "Done."})
+	if code, _, errOut := f.hc("reset", "abcd"); code == 0 || !strings.Contains(errOut, "prompt is not empty") {
+		t.Errorf("reset: %d %s", code, errOut)
 	}
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/humblebundledore/headcoach/internal/api"
 	"github.com/humblebundledore/headcoach/internal/client"
 	"github.com/humblebundledore/headcoach/internal/format"
+	"github.com/humblebundledore/headcoach/internal/handoff"
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/store"
@@ -85,6 +86,14 @@ func newDaemon(t *testing.T) *daemon {
 				{Task: push, Waited: 60, Tests: "passed", Delivery: "push", Change: &review.Change{
 					Branch: "main", Default: true, From: "aaaaaaa1", To: "bbbbbbb2", Commits: 2, Files: 3, Added: 10, Deleted: 1, Unpushed: 2}},
 			}, Metrics: api.ReviewMetrics{Days: 7, Reviews: 3, AvgWait: 600}})
+		case strings.HasSuffix(r.URL.Path, "/team"):
+			kid, grandkid := task("kid00001", "running", 60), task("gkid0001", "review", 5)
+			json.NewEncoder(w).Encode(api.Team{Task: task("boss0001", "done", 0), Handoff: handoff.Summary{Status: "Two tasks out."},
+				Members: []api.Member{
+					{Task: kid, Kids: 1, Handoff: handoff.Summary{Status: "Halfway.", Queue: handoff.Queue{Open: 2, Done: 1}}},
+					{Task: grandkid, Depth: 1, Tree: "└─ "},
+				},
+				OnYou: []api.OnYou{{Task: grandkid.ID, Short: "gkid0001", Title: "title gkid0001", Kind: "review", What: "PR #3"}}})
 		case r.URL.Path == "/api/tasks" && r.Method == "GET":
 			json.NewEncoder(w).Encode(api.Tasks{Tasks: []api.Task{task("fresh001", "running", 1)}})
 		case strings.HasPrefix(r.URL.Path, "/api/tasks/gone"):
@@ -96,7 +105,10 @@ func newDaemon(t *testing.T) *daemon {
 		default:
 			out := task("made0001", "backlog", 0)
 			out.Pane = "%7"
-			out.Detail = &api.Detail{Log: []transcript.Turn{{Who: "you", Text: "hello", Skipped: 3}, {Who: "tool", Text: "$ ls"}}}
+			out.Detail = &api.Detail{Log: []transcript.Turn{{Who: "you", Text: "hello", Skipped: 3}, {Who: "tool", Text: "$ ls"},
+				{Who: "you", Text: "[from coordinator 1a2b3c4d] stop", From: "coordinator 1a2b3c4d"}},
+				Handoff: &api.Handoff{Path: "/state/handoff/made0001.md", Text: "## Status\nHalfway.",
+					Summary: handoff.Summary{Status: "Halfway.", Queue: handoff.Queue{Open: 1, Next: "docs"}}}}
 			json.NewEncoder(w).Encode(out)
 		}
 	}))
@@ -1336,8 +1348,11 @@ func TestDetailQuestionAndHelp(t *testing.T) {
 	m = run(t, m, cmd)
 	m.detailID = "made0001" // the stand-in daemon answers with this task whatever is asked
 	m = run(t, m, m.loadDetail())
+	m = send(t, m, tea.WindowSizeMsg{Width: 200, Height: 60}) // tall enough for the whole detail
 	for _, piece := range []string{
-		"title made0001", "  state    Backlog", "Session log", "  you   | hello", "        | … 3 turns …", "  tool  | $ ls", "escape or q back",
+		"title made0001", "  state    Backlog", "Session log", "  you   | hello", "        | … 3 turns …", "  tool  | $ ls",
+		"  coord | [from coordinator 1a2b3c4d] stop", "escape or q back",
+		"Handoff", "  /state/handoff/made0001.md, written ", "    status   Halfway.", "    queue    1 open, 0 done, next: docs",
 	} {
 		if !strings.Contains(m.View(), piece) {
 			t.Errorf("the detail lacks %q:\n%s", piece, m.View())
@@ -1938,5 +1953,70 @@ func TestATaskLightsUpAsTheBoardSeesItMoveToDone(t *testing.T) {
 	m = send(t, m, glowMsg{})
 	if len(m.lit) != 0 || m.glowing {
 		t.Errorf("after the glow, lit = %v, glowing = %v", m.lit, m.glowing)
+	}
+}
+
+// A task shows under the one that drives it, with its sub-agents indented as deep.
+func TestBoardNestsChildTasks(t *testing.T) {
+	boss, kid := task("boss0001", "review", 9), task("kid00001", "needs", 1)
+	kid.Parent = boss.ID
+	kid.Agents = []api.Agent{{Name: "Explore", Desc: "look around", State: "running"}}
+	m := loaded(t, nil, kid, boss, task("other001", "running", 2))
+	// The child needs you, yet stays under its parent: the tree wins over the order of states.
+	if want := []string{"other001", "boss0001", "kid00001", "kid00001/0"}; !reflect.DeepEqual(m.keys, want) {
+		t.Errorf("keys = %v", m.keys)
+	}
+	screen := m.View()
+	for _, piece := range []string{"│boss0001 ▾ 1  Review ", "│└─ kid00001   Needs me ", "  title kid00001 ", "  └─ Explore: look around"} {
+		if !strings.Contains(screen, piece) {
+			t.Errorf("the board lacks %q:\n%s", piece, screen)
+		}
+	}
+}
+
+// w opens the coordinator view of the task under the cursor, or of the task driving it.
+func TestTeamView(t *testing.T) {
+	d := newDaemon(t)
+	boss, kid, gkid := task("boss0001", "done", 0), task("kid00001", "running", 60), task("gkid0001", "review", 5)
+	kid.Parent, gkid.Parent = boss.ID, kid.ID
+	lone := task("lone0001", "running", 1)
+	m := loaded(t, d, boss, kid, gkid, lone)
+	for _, c := range []struct{ task, want string }{{"boss0001", "boss0001"}, {"kid00001", "kid00001"}, {"gkid0001", "kid00001"}, {"lone0001", "lone0001"}} {
+		for i := range m.tasks {
+			if m.tasks[i].ID == c.task {
+				if got := m.teamOf(&m.tasks[i]); got != c.want {
+					t.Errorf("teamOf(%s) = %s, want %s", c.task, got, c.want)
+				}
+			}
+		}
+	}
+	m.jump = "boss0001"
+	m.rebuild()
+	m, cmd := press(t, m, "w")
+	if m.view != viewTeam || m.teamID != "boss0001" || !m.teamLoading {
+		t.Fatalf("w opened view %d for %q", m.view, m.teamID)
+	}
+	m = run(t, m, cmd)
+	view := m.View()
+	for _, want := range []string{"team(boss0001 title boss0001)[2]", "Waits on you", "gkid0001  title gkid0001  in Review: PR #3", "2 open, 1 done",
+		"kid00001 ▾ 1", "└─ gkid0001", "title gkid0001", "Halfway.", "last gkid0001", "Two tasks out."} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the view lacks %q:\n%s", want, view)
+		}
+	}
+	// An answer for another coordinator, come late, is dropped.
+	if m2 := send(t, m, teamMsg{id: "lone0001"}); len(m2.team.Members) != 2 {
+		t.Error("a late answer replaced the view")
+	}
+	m, _ = press(t, m, "?")
+	if m.view != viewNote || !strings.Contains(m.View(), "Coordinator keys") {
+		t.Fatalf("no help:\n%s", m.View())
+	}
+	m, _ = press(t, m, "x", "j", "enter")
+	if m.view != viewBoard || m.current() == nil || m.current().ID != "gkid0001" {
+		t.Errorf("enter did not show the task on the board: view %d", m.view)
+	}
+	if m, _ = press(t, m, "w", "esc"); m.view != viewBoard {
+		t.Errorf("escape went to view %d", m.view)
 	}
 }

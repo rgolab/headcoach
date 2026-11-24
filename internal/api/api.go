@@ -3,6 +3,7 @@
 package api
 
 import (
+	"github.com/humblebundledore/headcoach/internal/handoff"
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/store"
@@ -47,13 +48,25 @@ type Session struct {
 	StartedAt float64 `json:"started_at"`
 }
 
+// Handoff is a task's handoff file: where the work stands, for a fresh context or the task driving it.
+type Handoff struct {
+	Path string `json:"path"`
+	// Text is the file as it is, empty when there is none; HTML is its Markdown rendered. UpdatedAt is
+	// when it last changed, zero when there is no file.
+	Text      string          `json:"text"`
+	HTML      string          `json:"html"`
+	UpdatedAt float64         `json:"updated_at"`
+	Summary   handoff.Summary `json:"summary"`
+}
+
 // Detail is what only the view of a single task carries.
 type Detail struct {
 	History  []Move            `json:"history"`
 	Sessions []Session         `json:"sessions"`
 	Log      []transcript.Turn `json:"log"`
 	// Screen is what the terminal shows while a dialog is up, so it can be answered from the board.
-	Screen string `json:"screen"`
+	Screen  string   `json:"screen"`
+	Handoff *Handoff `json:"handoff"`
 }
 
 // Task is a task as the board shows it.
@@ -123,6 +136,54 @@ type Schedule struct {
 	Next float64 `json:"next"`
 	// LastState is the state of the task its last run started. Empty when there is none any more.
 	LastState string `json:"last_state"`
+}
+
+// InboxItem is one thing a task heard, or will hear, from one of its children.
+type InboxItem struct {
+	store.InboxItem
+	ChildShort string `json:"child_short"`
+	ChildTitle string `json:"child_title"` // empty when the child is gone
+	// News is the line the parent reads about it.
+	News string `json:"news"`
+}
+
+// Inbox is the answer of GET /api/tasks/{id}/inbox: what waits to be said first, then the newest.
+type Inbox struct {
+	Task  string      `json:"task"`
+	Items []InboxItem `json:"items"`
+}
+
+// Member is one task under a coordinator, as the coordinator view shows it.
+type Member struct {
+	Task
+	// Depth is how far under the coordinator it is: 0 for a task it drives itself. Tree draws the
+	// branches down to it from there, and Kids counts the tasks it drives in turn.
+	Depth int    `json:"depth"`
+	Tree  string `json:"tree"`
+	Kids  int    `json:"kids"`
+	// Handoff is what its handoff file says, HandoffAt when that changed: zero without a file.
+	Handoff   handoff.Summary `json:"handoff"`
+	HandoffAt float64         `json:"handoff_at"`
+}
+
+// OnYou is one thing that waits on you, in the coordinator view.
+type OnYou struct {
+	Task  string `json:"task"`
+	Short string `json:"short"`
+	Title string `json:"title"`
+	// Kind is needs for a task in Needs me, review for one in Review, handoff for a line of a handoff
+	// file that says it waits on you.
+	Kind string `json:"kind"`
+	What string `json:"what"`
+}
+
+// Team is the answer of GET /api/tasks/{id}/team: a coordinator, the tasks it drives at any depth,
+// and what waits on you among them.
+type Team struct {
+	Task    Task            `json:"task"`
+	Handoff handoff.Summary `json:"handoff"`
+	Members []Member        `json:"members"`
+	OnYou   []OnYou         `json:"on_you"`
 }
 
 // ReviewItem is one task of the review queue: what waits on you, and how big it is.

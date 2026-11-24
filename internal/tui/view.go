@@ -36,6 +36,8 @@ var (
 	selected    lipgloss.Color // background of the row under the cursor
 	// glowStyles light up a task that just moved to Done: bright first, then soft.
 	glowStyles [2]lipgloss.Style
+	// teamStyles color the trees of tasks that drive others, one per tree.
+	teamStyles []lipgloss.Style
 )
 
 const (
@@ -68,6 +70,8 @@ h               hide a done task, or show a hidden one again
 d               show or hide the hidden done tasks
 S               schedules: tasks that start themselves at a time of day, or on a cron line
 R               review queue: the tasks in Review, the one waiting longest first, with their change
+w               coordinator view: the tasks this one drives, or its parent drives, where each stands
+                and what waits on you among them
 C               columns: show, hide and reorder the columns of the board, kept after a restart
 ?               this help
 Q               quit (q or escape closes a view)`
@@ -90,7 +94,7 @@ var hintKeys = [][]hint{
 	{{"enter", "view"}, {"r", "reply"}, {"t", "title"}, {"m", "move"}, {"p", "park"}, {"a", "attach"}},
 	{{"A", "adopt"}, {"s", "start"}, {"n", "new"}, {"x", "delete"}, {"/", "filter"}, {"?", "help"}},
 	{{"S", "schedules"}, {"q", "ask"}, {"o", "order"}, {"d", "done"}, {":", "command"}, {"Q", "quit"}},
-	{{"c", "copy"}, {"R", "review"}, {"u", "update"}, {"v", "select"}, {"C", "columns"}},
+	{{"c", "copy"}, {"R", "review"}, {"u", "update"}, {"v", "select"}, {"C", "columns"}, {"w", "team"}},
 }
 
 // selectHintKeys are the keys shown in the header while the board is in select mode.
@@ -148,9 +152,38 @@ var columns = []column{
 type cell struct {
 	text  string
 	style lipgloss.Style
+	// parts draw the text piece by piece, each in a style of its own, when there are some.
+	parts []cell
 }
 
-func c(text string, style lipgloss.Style) cell { return cell{text, style} }
+func c(text string, style lipgloss.Style) cell { return cell{text: text, style: style} }
+
+// cs is a cell drawn in parts: style is the one the row reads it by, such as dim for a task in Done.
+func cs(style lipgloss.Style, parts ...cell) cell {
+	var text strings.Builder
+	for _, part := range parts {
+		text.WriteString(part.text)
+	}
+	return cell{text: text.String(), style: style, parts: parts}
+}
+
+// treeCell draws before a task the branches of the tree down to it, and after it how many tasks it
+// drives, in the color of its tree.
+func treeCell(row format.Row, task cell) cell {
+	drives := ""
+	if row.Agent == nil {
+		drives = format.Drives(row.Kids)
+	}
+	if row.Tree == "" && drives == "" {
+		return task
+	}
+	team := teamStyle(row.Team)
+	parts := []cell{c(row.Tree, team), task}
+	if drives != "" {
+		parts = append(parts, c(" "+drives, team))
+	}
+	return cs(task.style, parts...)
+}
 
 // clipStart cuts the start of a text wider than room, and marks the cut: the end of a path says
 // more than its start.
@@ -217,16 +250,15 @@ func rowCells(row format.Row) []cell {
 	empty := c("", plain)
 	t := row.Task
 	if a := row.Agent; a != nil {
-		branch := "├─"
-		if row.Last {
-			branch = "└─"
-		}
+		branch := format.Branch(row)
 		in, out, cache := format.TokenCells(a.Tokens)
-		return dimmed(t, []cell{
+		cells := dimmed(t, []cell{
 			empty, c(store.StateName(a.State), stateStyles[a.State]), empty, empty, empty, c(board.Clip(a.Persona, 26), plain), empty, empty, empty, empty, empty,
 			c(in, dim), c(out, dim), c(cache, dim), empty, empty, empty,
 			c(board.Clip(branch+" "+a.Name+": "+a.Desc, 70), plain), empty,
 		})
+		cells[0] = treeCell(row, cells[0])
+		return cells
 	}
 	persona, personaStyle := t.Persona, plain
 	if persona == "" {
@@ -272,8 +304,10 @@ func rowCells(row format.Row) []cell {
 		contextCell(t.Context),
 	}
 	cells = append(cells, tokenCells(t.Tokens)...)
-	return dimmed(t, append(cells, c(format.Money(t.Cost), plain), c(timer, timerStyle),
+	cells = dimmed(t, append(cells, c(format.Money(t.Cost), plain), c(timer, timerStyle),
 		c(schedule, scheduleStyle), c(title, plain), c(board.Clip(last, 80), dim)))
+	cells[0] = treeCell(row, cells[0])
+	return cells
 }
 
 // dimmed dims the cells of a task in Done, and of its child rows: one done a few minutes ago stays
@@ -375,23 +409,42 @@ func tableLines(columns []column, widths []int, rows [][]cell, cursor, width int
 	line := func(cells []cell, background bool) string {
 		var out strings.Builder
 		readable := background && active.cursorText == "" && faded(cells)
+		// look puts a style on the cursor bar, on the row under the cursor.
+		look := func(style lipgloss.Style) lipgloss.Style {
+			if !background {
+				return style
+			}
+			if active.cursorText != "" && !glowing(style) { // a light cursor bar needs dark text on it
+				style = style.Foreground(lipgloss.Color(active.cursorText))
+			}
+			return style.Background(selected)
+		}
 		for i, piece := range cells {
 			if readable { // dim text all but vanishes on the cursor bar
 				piece.style = plain
 			}
-			style := piece.style.Width(widths[i])
-			if columns[i].right {
-				style = style.Align(lipgloss.Right)
-			}
 			gap := plain
 			if background {
-				if active.cursorText != "" && !glowing(piece.style) { // a light cursor bar needs dark text on it
-					style = style.Foreground(lipgloss.Color(active.cursorText))
+				gap = plain.Background(selected)
+				if active.cursorText != "" && !glowing(piece.style) {
 					gap = gap.Foreground(lipgloss.Color(active.cursorText))
 				}
-				style, gap = style.Background(selected), gap.Background(selected)
 			}
-			out.WriteString(style.Render(piece.text))
+			if piece.parts == nil {
+				style := look(piece.style).Width(widths[i])
+				if columns[i].right {
+					style = style.Align(lipgloss.Right)
+				}
+				out.WriteString(style.Render(piece.text))
+			} else {
+				for _, part := range piece.parts {
+					if readable && reflect.DeepEqual(part.style, dim) {
+						part.style = plain
+					}
+					out.WriteString(look(part.style).Render(part.text))
+				}
+				out.WriteString(gap.Render(strings.Repeat(" ", max(0, widths[i]-lipgloss.Width(piece.text)))))
+			}
 			out.WriteString(gap.Render("  "))
 		}
 		// Truncated first: Width would wrap a long row to a second line instead of cutting it.
@@ -750,10 +803,14 @@ func describe(t *api.Task) []cell {
 	if where == "" {
 		where = "-"
 	}
-	for _, line := range [][2]string{
+	lines := [][2]string{
 		{"task", t.ID}, {"state", state}, {"repo", t.Repo}, {"branch", t.Branch}, {"dir", t.Cwd},
-		{"tmux", where}, {"profile", t.Profile}, {"persona", persona}, {"resume", t.Resume},
-	} {
+		{"tmux", where}, {"profile", t.Profile}, {"persona", persona},
+	}
+	if t.Parent != "" {
+		lines = append(lines, [2]string{"parent", board.Short(t.Parent)})
+	}
+	for _, line := range append(lines, [2]string{"resume", t.Resume}) {
 		label(line[0])
 		style := plain
 		if line[0] == "state" {
@@ -782,6 +839,16 @@ func describe(t *api.Task) []cell {
 	if detail == nil {
 		detail = &api.Detail{}
 	}
+	if h := detail.Handoff; h != nil && h.Text != "" {
+		add("\nHandoff\n", bold)
+		for i, line := range format.HandoffLines(*h, time.Now()) {
+			style := plain
+			if i == 0 {
+				line, style = strings.TrimPrefix(line, "handoff  "), dim
+			}
+			add("  "+line+"\n", style)
+		}
+	}
 	add("\nHistory\n", bold)
 	for _, move := range detail.History {
 		add("  "+time.Unix(int64(move.At), 0).Format("2006-01-02 15:04:05")+"  ", dim)
@@ -804,8 +871,13 @@ func describe(t *api.Task) []cell {
 		add("  Nothing yet\n", dim)
 	}
 	for _, turn := range detail.Log {
-		add(fmt.Sprintf("  %-5s | ", turn.Who), whoStyles[turn.Who])
-		style := plain
+		who := format.Who(turn)
+		style := whoStyles[turn.Who]
+		if turn.From != "" {
+			style = whoStyles["from"]
+		}
+		add(fmt.Sprintf("  %-5s | ", who), style)
+		style = plain
 		if turn.Who == "tool" {
 			style = dim
 		}

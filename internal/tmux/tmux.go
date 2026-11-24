@@ -182,6 +182,12 @@ func (c *Client) Capture(pane, socket string) string {
 	return out
 }
 
+// CaptureStyled is Capture with the colors and styles of the text, as escape sequences.
+func (c *Client) CaptureStyled(pane, socket string) string {
+	out, _ := run(socket, "", "capture-pane", "-e", "-p", "-t", pane)
+	return out
+}
+
 // KillPane closes a pane, and its window when it was the only pane. A pane already gone is fine.
 func (c *Client) KillPane(pane, socket string) {
 	_, _ = run(socket, "", "kill-pane", "-t", pane)

@@ -43,6 +43,9 @@ var (
 type Turn struct {
 	Who  string `json:"who"`
 	Text string `json:"text"`
+	// From is who sent a turn of yours that the board typed for another agent, as its label names
+	// it: "coordinator 1a2b3c4d", "task 1a2b3c4d", "an agent" or "hc". Empty for your own words.
+	From string `json:"from,omitempty"`
 	HTML string `json:"html,omitempty"` // the text rendered from Markdown, for agent turns
 	// Skipped counts the turns left out after this one, see Window.
 	Skipped int `json:"skipped,omitempty"`
