@@ -84,7 +84,7 @@ Then:
 | `p` | park: close the session, keep it for later |
 | `m` | move to another state |
 | `o` | order by state, cost, tokens or context |
-| `/` | filter |
+| `/` | fuzzy filter by title, repo or task id: `hcfz` finds "headcoach fuzzy", the cursor goes to the best fit, the arrows move it as you type |
 | `:` | command line: `update` installs the latest release, `restart` restarts the daemon, `columns` opens the columns, `help`, `q` |
 | `u` | update: install the latest release, after its notes and a yes |
 | `h` | hide a Done task, or show a hidden one again; a Done task stays on the board, dimmed, until you hide it |

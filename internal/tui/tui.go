@@ -386,7 +386,32 @@ func (m model) matches(t *api.Task) bool {
 	if t.State == "done" && !m.showDone && t.Hidden {
 		return false
 	}
-	return strings.Contains(strings.ToLower(t.Title+"\n"+t.Repo+"\n"+t.Short), strings.ToLower(m.needle))
+	_, ok := m.fits(t)
+	return ok
+}
+
+// fits scores the filter against the title, the repo and the id of a task.
+func (m model) fits(t *api.Task) (int, bool) { return fuzzy(m.needle, t.Title, t.Repo, t.Short) }
+
+// toBest puts the cursor on the task the filter fits best, the highest on the board on a tie. An
+// empty filter leaves it where it is.
+func (m *model) toBest() {
+	if strings.TrimSpace(m.needle) == "" {
+		return
+	}
+	best, top := -1, 0
+	for i, row := range m.rows {
+		if row.Agent != nil {
+			continue
+		}
+		if score, _ := m.fits(row.Task); best < 0 || score > top {
+			best, top = i, score
+		}
+	}
+	if best >= 0 {
+		m.cursor = best
+		m.clamp()
+	}
 }
 
 // rebuild recomputes the rows, then puts the cursor back on the task it was on.
@@ -743,6 +768,25 @@ func (m *model) folderKey(msg tea.KeyMsg) bool {
 		m.folderCursor = max(0, m.folderCursor-m.folderRows())
 	case msg.Type == tea.KeyTab, msg.Type == tea.KeyDown, msg.Type == tea.KeyUp, msg.Type == tea.KeyPgDown, msg.Type == tea.KeyPgUp:
 		// nothing to choose from
+	default:
+		return false
+	}
+	m.clamp()
+	return true
+}
+
+// filterKey moves the cursor of the table with the arrows while the filter is typed, so a task is
+// picked without leaving the line. It says whether it took the key.
+func (m *model) filterKey(msg tea.KeyMsg) bool {
+	switch msg.Type {
+	case tea.KeyUp:
+		m.cursor--
+	case tea.KeyDown:
+		m.cursor++
+	case tea.KeyPgUp:
+		m.cursor -= m.tableHeight()
+	case tea.KeyPgDown:
+		m.cursor += m.tableHeight()
 	default:
 		return false
 	}
@@ -1284,7 +1328,7 @@ func (m *model) planBatch(key, state string) (title, question string, cmd tea.Cm
 
 // typing handles a key while the input line is open.
 func (m model) typing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	if m.asking == "newdir" && m.folderKey(msg) {
+	if m.asking == "newdir" && m.folderKey(msg) || m.asking == "filter" && m.filterKey(msg) {
 		return m, nil
 	}
 	switch msg.String() {
@@ -1363,9 +1407,10 @@ func (m model) typing(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.listFolders()
 		m.clamp()
 	}
-	if m.asking == "filter" { // the table follows the filter as it is typed
+	if m.asking == "filter" && m.input.Value() != m.needle { // the table follows the filter as it is typed
 		m.needle = m.input.Value()
 		m.rebuild()
+		m.toBest()
 	}
 	return m, cmd
 }
@@ -1398,7 +1443,7 @@ func (m model) boardKey(key string) (tea.Model, tea.Cmd) {
 		m.order = format.Sorts[(slices.Index(format.Sorts, m.order)+1)%len(format.Sorts)]
 		m.rebuild()
 	case "/":
-		return m, m.ask("filter", "Filter by title, repo or task id", m.needle)
+		return m, m.ask("filter", "Fuzzy filter by title, repo or task id", m.needle)
 	case ":":
 		return m, m.ask("command", "Command: "+strings.Join(commandNames, ", "), "")
 	case "u":
