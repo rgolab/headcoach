@@ -12,6 +12,8 @@
 
 ## Changes
 
+- every change reaches `main` through a pull request, the maintainer's too
+- a pull request is merged once its CI is green
 - `make check` passes
 - one commit per feature or fix, with its tests and docs
 - a fix, test or doc of a change not yet pushed is folded into its commit
@@ -23,9 +25,11 @@
 
 ## Releases
 
-- move the `Unreleased` lines of `CHANGELOG.md` under a new `## [X.Y.Z] - date` heading
-- add its compare link at the bottom of `CHANGELOG.md`, and point `[Unreleased]` at the new tag
-- commit, then tag and push: `git tag -a vX.Y.Z -m vX.Y.Z && git push origin vX.Y.Z`
+- a release is its own pull request, opened when the maintainer decides to ship, after any number of merged changes
+- it comes from a branch `release-vX.Y.Z`
+- it moves the `Unreleased` lines of `CHANGELOG.md` under a new `## [X.Y.Z] - date` heading
+- it adds the compare link at the bottom of `CHANGELOG.md`, and points `[Unreleased]` at the new tag
+- once it is merged, tag its merge commit and push the tag: `git fetch origin && git tag -a vX.Y.Z -m vX.Y.Z origin/main && git push origin vX.Y.Z`
 - the release workflow builds the binaries and publishes the release with that section as notes
 - `scripts/changelog.sh vX.Y.Z` prints the notes before you tag
 
