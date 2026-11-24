@@ -145,6 +145,18 @@ CREATE TABLE IF NOT EXISTS messages (
     at          REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS messages_task ON messages(task_id);
+CREATE TABLE IF NOT EXISTS inbox (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_id    TEXT NOT NULL,
+    child_id     TEXT NOT NULL,
+    state        TEXT NOT NULL,
+    ask          TEXT NOT NULL DEFAULT '',
+    ask_kind     TEXT NOT NULL DEFAULT '',
+    last         TEXT NOT NULL DEFAULT '',
+    at           REAL NOT NULL,
+    delivered_at REAL NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS inbox_parent ON inbox(parent_id);
 CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     at         REAL NOT NULL,
@@ -466,7 +478,19 @@ func (s *Store) SetState(id, state, by string, fields Fields) (bool, error) {
 	}
 	changed := task.State != state
 	if changed {
-		_, err = s.Exec("INSERT INTO history (task_id, state, at, by) VALUES (?, ?, ?, ?)", id, state, Now(), by)
+		if _, err = s.Exec("INSERT INTO history (task_id, state, at, by) VALUES (?, ?, ?, ?)", id, state, Now(), by); err != nil {
+			return changed, err
+		}
+		// The task's parent learns of it, unless the parent made the move itself.
+		if task.Parent != "" && Notified[state] && by != ByTask(task.Parent) {
+			ask, _ := set["ask"].(string)
+			askKind, _ := set["ask_kind"].(string)
+			last, ok := set["last"].(string)
+			if !ok {
+				last = task.Last
+			}
+			err = s.notify(InboxItem{ParentID: task.Parent, ChildID: id, State: state, Ask: ask, AskKind: askKind, Last: last})
+		}
 	}
 	return changed, err
 }
@@ -483,6 +507,7 @@ func (s *Store) HideTask(id string, hidden bool) error {
 func (s *Store) DeleteTask(id string) error {
 	for _, stmt := range []string{
 		"DELETE FROM history WHERE task_id = ?",
+		"DELETE FROM inbox WHERE parent_id = ?1 OR child_id = ?1",
 		"DELETE FROM agents WHERE task_id = ?",
 		"DELETE FROM messages WHERE task_id = ?",
 		"UPDATE sessions SET task_id = NULL WHERE task_id = ?",

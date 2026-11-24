@@ -108,6 +108,7 @@ Then:
 - `hc new --timer 10m "<prompt>"` gives a task a timer, see [Timers](#timers)
 - `hc new --model sonnet --effort low "<prompt>"` picks the model and the effort level, see [Model and effort](#model-and-effort)
 - `hc new --parent <id> "<prompt>"`, `hc link <id> <parent>` and `hc unlink <id>` put a task under the one that drives it, see [Coordinators](#coordinators)
+- `hc inbox [<id>]` lists what a task heard from the tasks it drives
 - `hc move <id> <state>` moves a session, the state as the board shows it, `Running` or `Needs me`, and `Parked` closes it
 - `hc adopt <id>` moves a session from your tmux into the board's
 - `hc limits` shows each limit and when it resets
@@ -195,6 +196,16 @@ Then:
 - each tree takes a color of its own, picked from the task at its top, on the board and on the web board
 - a card of the web board names its parent with a `↳` tag, and a parent card says how many tasks it drives with a `▾` tag, in the color of their tree
 - `self` works wherever a command takes a task, from inside a session: `hc show self`
+- a parent hears from its children without polling: when a child stops in `Needs me`, `Review`, `Done` or `Parked`, the board types one line about it into the parent's session, after `[from hc]`
+- the line says what the child asks, or its last words: `- 1a2b3c4d "Fix login" is in Review: pushed, PR #12 open`
+- a child has to stay put 10 seconds first, so a permission prompt answered at once is no news
+- a newer state replaces an older one not said yet, and a child back at work by then says nothing
+- a move the parent made itself, such as `hc move <child> done`, is no news to it
+- the board waits until the parent can hear: its turn is over, or it only waits on its own jobs, and its prompt is on screen
+- it never types while the parent works, waits on you, shows a dialog, or has words in its prompt; a suggestion Claude Code draws there does not count
+- it types into a parent once a minute at most, all its children's news in one message, and never opens a session for it
+- `hc inbox [<task>]` lists what a task heard and what waits to be said, the calling task by default
+- the history of a task names the task that moved it: `by task 1a2b3c4d`
 - `hc reply` from inside a session puts its sender before the message: `[from task 1a2b3c4d] stop`, so the other session never takes it for your words
 - `hc new` from inside a session does the same to the task's first prompt
 - a slash command keeps its place and the label goes before its arguments; a bare one such as `/compact` has none

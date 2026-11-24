@@ -55,10 +55,11 @@ func (f *fakeTmux) err() error {
 	return nil
 }
 
-func (f *fakeTmux) Installed() bool                     { return f.installed }
-func (f *fakeTmux) Available() bool                     { return f.available }
-func (f *fakeTmux) Panes(socket string) map[string]bool { return f.panes(socket) }
-func (f *fakeTmux) Capture(pane, socket string) string  { return f.screen }
+func (f *fakeTmux) Installed() bool                          { return f.installed }
+func (f *fakeTmux) Available() bool                          { return f.available }
+func (f *fakeTmux) Panes(socket string) map[string]bool      { return f.panes(socket) }
+func (f *fakeTmux) Capture(pane, socket string) string       { return f.screen }
+func (f *fakeTmux) CaptureStyled(pane, socket string) string { return f.screen }
 func (f *fakeTmux) RenameWindow(pane, name, socket string) {
 	f.renamed = append(f.renamed, pane+"|"+name)
 }

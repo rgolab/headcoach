@@ -366,13 +366,14 @@ func (b *Board) onSessionStart(p Payload, sess *store.Session) error {
 		return err
 	}
 	if task.State == "done" {
-		// A task you closed yourself stays closed: what follows is a new task. One the board closed goes on.
+		// A task you, or another agent, closed by hand stays closed: what follows is a new task. One the
+		// board closed goes on.
 		var by string
 		err = b.st.QueryRow("SELECT by FROM history WHERE task_id = ? ORDER BY id DESC LIMIT 1", task.ID).Scan(&by)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
 		}
-		if by == "you" {
+		if by == "you" || by == FromAgent || store.TaskOf(by) != "" {
 			return nil
 		}
 	}

@@ -116,6 +116,7 @@ func init() {
 		}},
 		{name: "link", args: task + " <parent>", help: "put a task under the one that drives it; self is the task of the session hc runs in", min: 2, max: 2, run: cmdLink},
 		{name: "unlink", args: task, help: "take a task from under its parent", min: 1, max: 1, run: cmdUnlink},
+		{name: "inbox", args: "[" + task + "]", help: "what a task heard from the tasks it drives, and what waits to be said (default: self)", max: 1, run: cmdInbox, flags: []flag{jsonFlag}},
 		{name: "review", help: "list the tasks in Review, the one waiting longest first, with their change", run: cmdReview, flags: []flag{jsonFlag}},
 		{name: "start", args: task, help: "start or resume a task in a new tmux window", min: 1, max: 1, run: cmdStart},
 		{name: "attach", args: task, help: "enter a task's session from this terminal; Ctrl-] comes back", min: 1, max: 1, run: cmdAttach},
@@ -665,6 +666,37 @@ func taskCell(row format.Row) string {
 		cell += " " + drives
 	}
 	return cell
+}
+
+func cmdInbox(e *env, p parsed) error {
+	id := "self"
+	if len(p.args) > 0 {
+		id = p.args[0]
+	}
+	var inbox api.Inbox
+	if err := e.client.Call("GET", "/api/tasks/"+id+"/inbox", nil, &inbox); err != nil {
+		return err
+	}
+	if p.has("json") {
+		return e.json(inbox)
+	}
+	if len(inbox.Items) == 0 {
+		e.printf("Nothing from the tasks under %s yet.\n", board.Short(inbox.Task))
+		return nil
+	}
+	now := store.Now()
+	for _, it := range inbox.Items {
+		status, at := "waiting", it.At
+		if it.DeliveredAt > 0 {
+			status, at = "sent", it.DeliveredAt
+		}
+		title := it.ChildTitle
+		if title == "" {
+			title = "(deleted)"
+		}
+		e.printf("%-7s %5s  %-8s  %s: %s\n", status, format.Human(int(now-at)), it.ChildShort, cut(title, 40), it.News)
+	}
+	return nil
 }
 
 func cmdStart(e *env, p parsed) error {

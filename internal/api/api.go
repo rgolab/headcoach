@@ -125,6 +125,21 @@ type Schedule struct {
 	LastState string `json:"last_state"`
 }
 
+// InboxItem is one thing a task heard, or will hear, from one of its children.
+type InboxItem struct {
+	store.InboxItem
+	ChildShort string `json:"child_short"`
+	ChildTitle string `json:"child_title"` // empty when the child is gone
+	// News is the line the parent reads about it.
+	News string `json:"news"`
+}
+
+// Inbox is the answer of GET /api/tasks/{id}/inbox: what waits to be said first, then the newest.
+type Inbox struct {
+	Task  string      `json:"task"`
+	Items []InboxItem `json:"items"`
+}
+
 // ReviewItem is one task of the review queue: what waits on you, and how big it is.
 type ReviewItem struct {
 	Task

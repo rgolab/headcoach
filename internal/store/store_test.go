@@ -109,3 +109,51 @@ func TestMessagesAreTrimmedAndDeleted(t *testing.T) {
 		t.Errorf("another task lost its messages: %v", other)
 	}
 }
+
+// A child's stop reaches its parent's inbox, one item per child; a move the parent made does not.
+func TestInboxItems(t *testing.T) {
+	st, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for _, task := range []Task{{ID: "boss", Title: "boss"}, {ID: "kid", Title: "kid", Parent: "boss", State: "running"}, {ID: "solo", Title: "solo"}} {
+		if _, err := st.CreateTask(task, "you"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pending := func() []string {
+		items, err := st.Inbox("WHERE delivered_at = 0 ORDER BY id")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, it := range items {
+			out = append(out, it.ParentID+" "+it.ChildID+" "+it.State+" "+it.AskKind+" "+it.Ask+" "+it.Last)
+		}
+		return out
+	}
+	st.SetState("solo", "done", "hook", nil)
+	st.SetState("kid", "needs", "hook", Fields{"ask": "A or B?", "ask_kind": "question"})
+	if got := pending(); len(got) != 1 || got[0] != "boss kid needs question A or B? " {
+		t.Fatalf("pending = %q", got)
+	}
+	st.SetState("kid", "running", "hook", nil)
+	st.SetState("kid", "review", "hook", Fields{"last": "Pushed"})
+	if got := pending(); len(got) != 1 || got[0] != "boss kid review   Pushed" {
+		t.Fatalf("pending = %q", got)
+	}
+	st.SetState("kid", "done", ByTask("boss"), nil)
+	if got := pending(); len(got) != 1 || got[0] != "boss kid review   Pushed" {
+		t.Fatalf("a move by the parent itself: %q", got)
+	}
+	if TaskOf(ByTask("boss")) != "boss" || TaskOf("you") != "" {
+		t.Error("TaskOf does not undo ByTask")
+	}
+	if err := st.DeleteTask("kid"); err != nil {
+		t.Fatal(err)
+	}
+	if got := pending(); len(got) != 0 {
+		t.Errorf("a deleted child leaves %q", got)
+	}
+}

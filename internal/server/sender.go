@@ -45,6 +45,25 @@ func (s *Server) caller(r *http.Request) (sender, error) {
 	return sender{kind: board.FromYou}, nil
 }
 
+// by is how the history of a task records a move this sender made.
+func (from sender) by() string {
+	if from.kind == board.FromTask {
+		return store.ByTask(from.task)
+	}
+	return from.kind
+}
+
+// name is how a line of the board names this sender: you, task 1a2b3c4d or an agent.
+func (from sender) name() string {
+	switch from.kind {
+	case board.FromTask:
+		return "task " + board.Short(from.task)
+	case board.FromAgent:
+		return "an agent"
+	}
+	return "you"
+}
+
 // label is what goes before a message from this sender to a task: from its coordinator when the
 // sender is the task's parent.
 func (from sender) label(to *store.Task) string {

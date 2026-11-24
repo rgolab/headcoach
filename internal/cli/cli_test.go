@@ -36,6 +36,7 @@ func (f *fakeTmux) Available() bool                                     { return
 func (f *fakeTmux) Panes(socket string) map[string]bool                 { return f.panes }
 func (f *fakeTmux) RenameWindow(pane, name, socket string)              {}
 func (f *fakeTmux) Capture(pane, socket string) string                  { return "the screen\n" }
+func (f *fakeTmux) CaptureStyled(pane, socket string) string            { return "the screen\n" }
 func (f *fakeTmux) KillPane(pane, socket string)                        { delete(f.panes, pane) }
 func (f *fakeTmux) SendKeys(pane string, keys []string, s string) error { return tmux.CheckKeys(keys) }
 func (f *fakeTmux) TypeText(pane, text, socket string) error            { return nil }
@@ -255,6 +256,28 @@ func TestLinks(t *testing.T) {
 	var detail api.Task
 	if err := json.Unmarshal([]byte(f.ok("show", "--json", strings.Fields(out)[0])), &detail); err != nil || detail.Parent != "abcd1234-s1" {
 		t.Errorf("--parent self: %+v %v", detail.Parent, err)
+	}
+}
+
+// hc inbox lists what a task heard from the tasks it drives, and what waits to be said.
+func TestInbox(t *testing.T) {
+	f := newFixture(t)
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "coordinate"})
+	if out := f.ok("inbox", "abcd"); out != "Nothing from the tasks under abcd1234 yet.\n" {
+		t.Errorf("empty inbox: %q", out)
+	}
+	child := strings.Fields(f.ok("new", "-t", "Child", "--parent", "abcd", "do it"))[0]
+	f.ok("move", child, "review")
+	out := f.ok("inbox", "abcd")
+	if !strings.HasPrefix(out, "waiting ") || !strings.Contains(out, child+"  Child: is in Review: Moved by your user\n") {
+		t.Errorf("inbox = %q", out)
+	}
+	if code, _, errOut := f.hc("inbox"); code == 0 || !strings.Contains(errOut, "self names the task") {
+		t.Errorf("inbox outside a session: %d %s", code, errOut)
+	}
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "abcd1234-s1")
+	if got := f.ok("inbox"); got != out {
+		t.Errorf("inbox from the parent's session = %q", got)
 	}
 }
 

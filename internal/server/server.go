@@ -76,6 +76,7 @@ type Tmux interface {
 	SendText(pane, text, socket string) error
 	RenameWindow(pane, name, socket string)
 	Capture(pane, socket string) string
+	CaptureStyled(pane, socket string) string
 	KillPane(pane, socket string)
 	SendKeys(pane string, keys []string, socket string) error
 	TypeText(pane, text, socket string) error
@@ -166,6 +167,7 @@ func (s *Server) Handler() http.Handler {
 	locked("DELETE /api/tasks/{id}", s.deleteTask)
 	locked("POST /api/tasks/{id}/start", s.startTask)
 	locked("POST /api/tasks/{id}/reply", s.reply)
+	locked("GET /api/tasks/{id}/inbox", s.inbox)
 	locked("GET /api/tasks/{id}/screen", s.screen)
 	locked("POST /api/tasks/{id}/keys", s.keys)
 	locked("POST /api/tasks/{id}/focus", s.focus)
@@ -709,6 +711,9 @@ func (s *Server) view(task *store.Task, detail bool) (*api.Task, error) {
 			rows.Close()
 			return nil, err
 		}
+		if id := store.TaskOf(move.By); id != "" {
+			move.By = "task " + board.Short(id)
+		}
 		d.History = append(d.History, move)
 	}
 	if err := rows.Close(); err != nil {
@@ -1004,7 +1009,7 @@ func (s *Server) createTask(r *http.Request) (any, error) {
 		prompt = board.Labeled(label, prompt)
 	}
 	task, err := s.addTask(title, prompt, str(data, "cwd"), str(data, "profile"), model, effort,
-		str(data, "source"), "", "you", truthy(data["start"]), timer)
+		str(data, "source"), "", from.by(), truthy(data["start"]), timer)
 	if task != nil && parent != "" {
 		if err := s.st.UpdateTask(task.ID, store.Fields{"parent": parent}); err != nil {
 			return nil, err
@@ -1129,6 +1134,10 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 	if state, ok := data["state"].(string); hidden && (ok && state != "done" || !ok && task.State != "done") {
 		return nil, fail(400, "Only a done task can be hidden")
 	}
+	from, err := s.caller(r)
+	if err != nil {
+		return nil, err
+	}
 	_, relink := data["parent"]
 	parent, err := s.parentFor(r, str(data, "parent"), task.ID)
 	if err != nil {
@@ -1184,10 +1193,10 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 				s.tmux.KillPane(live.Pane, live.Socket)
 			}
 			if err = s.closeSessions(task.ID); err == nil {
-				_, err = s.st.SetState(task.ID, "parked", "you", store.Fields{"last": "Parked by you"})
+				_, err = s.st.SetState(task.ID, "parked", from.by(), store.Fields{"last": "Parked by " + from.name()})
 			}
 		case state != task.State:
-			_, err = s.st.SetState(task.ID, state, "you", store.Fields{"last": "Moved by you"})
+			_, err = s.st.SetState(task.ID, state, from.by(), store.Fields{"last": "Moved by " + from.name()})
 		}
 		if err != nil {
 			return nil, err
