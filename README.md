@@ -92,6 +92,7 @@ Then:
 | `h` | hide a Done task, or show a hidden one again; a Done task stays on the board, dimmed, until you hide it |
 | `d` | show or hide the hidden Done tasks |
 | `x` | delete from the board |
+| `X` | delete from the board in 10 minutes, without a question; `X` again keeps it |
 | `v` | select: `space` ticks tasks, then `x`, `m`, `p` or `h` deletes, moves, parks or hides all of them after one y / n, `esc` leaves |
 | `?` | help |
 | `Q` | quit |
@@ -157,6 +158,8 @@ Then:
 - the ⏱ column of the board and of `hc ls` shows the time left, `-` without a timer, the review queue ⏱ before the title, and the web board a tag
 - once it runs out, within half a minute, the task moves to Done and its session ends, whatever it was doing
 - a task you moved to Done yourself only loses its timer: a session you kept open there stays
+- `X` on the board deletes a task in 10 minutes, as `x` does but without a question: the ⏱ column shows `✗` and the time left, unless the timer runs out first
+- `X` again keeps the task, and so does a task that runs again: a reply or a start brings it back to Running
 - a schedule gives each of its runs a timer: `hc schedule add --timer 10m ...`, or `hc schedule timer <schedule> 10m` on one already there
 - the daemon runs timers, so it must be running
 

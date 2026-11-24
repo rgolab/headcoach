@@ -88,10 +88,12 @@ type Task struct {
 	// Pinned says the task is pinned to the top of the board; PinnedAt says since when.
 	Pinned bool `json:"pinned"`
 	// TimerLeft is how many seconds the task's timer has left before it closes the task. Zero: no timer.
-	TimerLeft int      `json:"timer_left"`
-	Tags      []string `json:"tags"`
-	Links     []Link   `json:"links"`
-	Resume    string   `json:"resume"`
+	TimerLeft int `json:"timer_left"`
+	// DeleteLeft is how many seconds are left before the daemon deletes the task. Zero: it stays.
+	DeleteLeft int      `json:"delete_left"`
+	Tags       []string `json:"tags"`
+	Links      []Link   `json:"links"`
+	Resume     string   `json:"resume"`
 	// Tokens is what the task has consumed so far, sub-agents included. AgentTokens is their share.
 	Tokens      usage.Tokens `json:"tokens"`
 	AgentTokens usage.Tokens `json:"agent_tokens"`

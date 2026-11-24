@@ -390,7 +390,7 @@ func cmdLs(e *env, p parsed) error {
 		profile := orDash(t.Profile)
 		model := orDash(format.ModelCell(t.Model, t.SessionModel))
 		effort := orDash(format.EffortCell(t.Effort, t.SessionEffort))
-		timer := orDash(format.TimerCell(t.TimerLeft))
+		timer := orDash(format.TimerCell(t.TimerLeft, t.DeleteLeft))
 		schedule := orDash(format.ScheduleCell(t.Schedule))
 		in, out, cache := format.TokenCells(&t.Tokens)
 		e.printf("%-*s %s %-8s %-6s %-6s %-26s %-16s %-4s %6s %6s %s %6s %6s %6s %6s %5s %-8s  %s%s\n",

@@ -633,6 +633,7 @@ func (s *Server) view(task *store.Task, detail bool) (*api.Task, error) {
 		CanReply:    !isDialog(task),
 		Pinned:      task.PinnedAt > 0,
 		TimerLeft:   timerLeft(task, now),
+		DeleteLeft:  left(task.DeleteAt, now),
 		Tags:        tags,
 		Links:       []api.Link{},
 		Resume:      resume,
@@ -1153,6 +1154,12 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 	if state, ok := data["state"].(string); hidden && (ok && state != "done" || !ok && task.State != "done") {
 		return nil, fail(400, "Only a done task can be hidden")
 	}
+	deleteIn := 0
+	if _, ok := data["delete_in"]; ok {
+		if deleteIn, err = seconds(data, "delete_in", "delete_in"); err != nil {
+			return nil, err
+		}
+	}
 	from, err := s.caller(r)
 	if err != nil {
 		return nil, err
@@ -1182,6 +1189,11 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 			return nil, err
 		}
 		if err := s.st.UpdateTask(task.ID, store.Fields{"ends_at": endsAt(timer)}); err != nil {
+			return nil, err
+		}
+	}
+	if _, ok := data["delete_in"]; ok {
+		if err := s.st.DeleteTaskAt(task.ID, endsAt(deleteIn)); err != nil {
 			return nil, err
 		}
 	}
@@ -1240,8 +1252,13 @@ func (s *Server) deleteTask(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = os.Remove(s.cfg.HandoffPath(task.ID)) // its handoff goes with it; there may be none
-	return map[string]string{"deleted": task.ID}, s.st.DeleteTask(task.ID)
+	return map[string]string{"deleted": task.ID}, s.removeTask(task.ID)
+}
+
+// removeTask deletes a task, and its handoff with it.
+func (s *Server) removeTask(id string) error {
+	_ = os.Remove(s.cfg.HandoffPath(id)) // there may be none
+	return s.st.DeleteTask(id)
 }
 
 func (s *Server) startTask(r *http.Request) (any, error) {

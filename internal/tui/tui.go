@@ -39,6 +39,8 @@ const (
 	// glowStep is between two frames of a task lit up as it moves to Done.
 	glowStep = 250 * time.Millisecond
 	askWait  = 150 * time.Second
+	// deleteDelay is how long X leaves a task on the board before the daemon deletes it.
+	deleteDelay = 10 * time.Minute
 	// permission is why a reply cannot answer a permission prompt.
 	permission = "The session is asking for a permission. Answer it in the terminal."
 )
@@ -1568,6 +1570,16 @@ func (m model) boardKey(key string) (tea.Model, tea.Cmd) {
 			c := m.client
 			return func() tea.Msg { return doneMsg{err: c.Call("DELETE", "/api/tasks/"+id, nil, nil)} }
 		})
+	case "X":
+		// No question: the task stays for a while, and X again keeps it.
+		if t.DeleteLeft > 0 {
+			return m, m.act("PATCH", path, map[string]int{"delete_in": 0},
+				func(t api.Task) string { return t.Short + " kept" })
+		}
+		return m, m.act("PATCH", path, map[string]int{"delete_in": int(deleteDelay.Seconds())},
+			func(t api.Task) string {
+				return t.Short + " deleted in " + format.Human(t.DeleteLeft) + ", X again keeps it"
+			})
 	case "a":
 		// A sub-agent has no terminal of its own: its row enters the main session, and says so.
 		return m, m.attach(*t, m.rows[m.cursor].Agent != nil)

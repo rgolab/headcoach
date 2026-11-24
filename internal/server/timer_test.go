@@ -1,6 +1,9 @@
 package server
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -95,4 +98,87 @@ func TestAScheduleTimesEachRun(t *testing.T) {
 	f.ok(f.patch("/api/tasks/"+run.ID, obj{"state": "done"}))
 	f.runDue(monday(0, 9, 15))
 	eq(t, f.task(f.schedule(id).LastTask).EndsAt, float64(0))
+}
+
+func TestADeleteIsSetCancelledAndDone(t *testing.T) {
+	f := newFixture(t)
+	id := f.newTask(nil).str("id")
+	kept := f.newTask(nil).str("id")
+	path := "/api/tasks/" + id
+	before := f.task(id).UpdatedAt
+
+	eq(t, f.ok(f.patch(path, obj{"delete_in": 600})).data["delete_left"], float64(600))
+	if at := f.task(id).DeleteAt; at < store.Now()+590 || at > store.Now()+600 {
+		t.Errorf("delete_at %v is not ten minutes from now", at)
+	}
+	// A delete to come is not activity: the task does not look busy.
+	eq(t, f.task(id).UpdatedAt, before)
+	eq(t, f.ok(f.patch(path, obj{"delete_in": 0})).data["delete_left"], float64(0))
+	eq(t, f.task(id).DeleteAt, float64(0))
+	for _, bad := range []any{-1, 1.5, "10m", nil, true, maxTimer + 1} {
+		f.wantError(f.patch(path, obj{"delete_in": bad}), 400)
+	}
+	eq(t, f.task(id).DeleteAt, float64(0))
+
+	// Not yet due: the task stays. Due: it goes with its handoff, the other one stays.
+	f.ok(f.patch(path, obj{"delete_in": 60}))
+	if err := os.MkdirAll(filepath.Dir(f.cfg.HandoffPath(id)), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f.cfg.HandoffPath(id), []byte("# Handoff\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.srv.Expire(time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	eq(t, f.count("tasks"), 2)
+	if err := f.srv.Expire(time.Now().Add(2 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	eq(t, f.count("tasks"), 1)
+	if f.task(kept) == nil {
+		t.Error("the task without a delete went too")
+	}
+	if _, err := os.Stat(f.cfg.HandoffPath(id)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the handoff of the deleted task stayed: %v", err)
+	}
+	f.wantError(f.get(path), 404)
+}
+
+func TestATimerAndADeleteDueTogether(t *testing.T) {
+	f := newFixture(t)
+	running := f.live()
+	f.ok(f.patch("/api/tasks/"+running, obj{"timer": 60, "delete_in": 60}))
+	if err := f.srv.Expire(time.Now().Add(2 * time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	// The timer is a hard limit: the session is closed before its task goes.
+	eq(t, f.tmux.killed, []string{"%1|"})
+	eq(t, f.session("s1").Live, false)
+	eq(t, f.count("tasks"), 0)
+}
+
+func TestATaskThatRunsAgainIsNotDeleted(t *testing.T) {
+	f := newFixture(t)
+	running := f.live()
+	path := "/api/tasks/" + running
+	// A delete set on a running task holds while it keeps running.
+	f.ok(f.patch(path, obj{"delete_in": 600}))
+	f.hook("UserPromptSubmit", "s1", obj{"prompt": "more"}, "X-Tmux-Pane", "%1")
+	eq(t, f.task(running).State, "running")
+	if f.task(running).DeleteAt == 0 {
+		t.Error("a prompt to a running task cancelled its delete")
+	}
+	// Set on a done task, it goes once the task runs again.
+	f.ok(f.patch(path, obj{"state": "done"}))
+	f.ok(f.patch(path, obj{"delete_in": 600}))
+	f.hook("UserPromptSubmit", "s1", obj{"prompt": "one more thing"}, "X-Tmux-Pane", "%1")
+	eq(t, f.task(running).State, "running")
+	eq(t, f.task(running).DeleteAt, float64(0))
+
+	// A refused delete changes nothing else.
+	f.wantError(f.patch(path, obj{"title": "renamed", "delete_in": "10m"}), 400)
+	if f.task(running).Title == "renamed" {
+		t.Error("a refused request renamed the task")
+	}
 }

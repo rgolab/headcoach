@@ -305,8 +305,14 @@ func TestEffortCell(t *testing.T) {
 
 func TestTimerCell(t *testing.T) {
 	for left, want := range map[int]string{0: "", -1: "", 45: "45s", 420: "7m"} {
-		if got := TimerCell(left); got != want {
-			t.Errorf("TimerCell(%d) = %q, want %q", left, got, want)
+		if got := TimerCell(left, 0); got != want {
+			t.Errorf("TimerCell(%d, 0) = %q, want %q", left, got, want)
+		}
+	}
+	// A delete to come shows unless the timer runs out first.
+	for left, want := range map[int]string{0: "✗ 10m", 900: "✗ 10m", 600: "✗ 10m", 420: "7m"} {
+		if got := TimerCell(left, 600); got != want {
+			t.Errorf("TimerCell(%d, 600) = %q, want %q", left, got, want)
 		}
 	}
 }
