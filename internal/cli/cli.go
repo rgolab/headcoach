@@ -97,7 +97,7 @@ func init() {
 		}},
 		{name: "ls", help: "list tasks as a tree", run: cmdLs, flags: []flag{
 			{name: "all", short: "a", help: "include done tasks"},
-			{name: "sort", short: "s", value: true, help: "state (default), cost, tokens or ctx: the biggest first"},
+			{name: "sort", short: "s", value: true, help: "state (default); idle, the most recently active first; cost, tokens or ctx, the biggest first"},
 			jsonFlag,
 		}},
 		{name: "show", args: task, help: "show one task and the end of its session", min: 1, max: 1, run: cmdShow, flags: []flag{
@@ -127,6 +127,8 @@ func init() {
 		{name: "reply", args: task + " <text>...", help: "send a message to a task's session, or the answer to its question; from a session, it names its sender", min: 2, max: -1, run: cmdReply},
 		{name: "timer", args: task + " <duration|off>", help: "close a task once this long has passed from now, e.g. 10m; off removes its timer", min: 2, max: 2, run: cmdTimer},
 		{name: "move", args: task + " <state>", help: "move a task to another state: " + stateNames(), min: 2, max: -1, run: cmdMove},
+		{name: "pin", args: task, help: "pin a task to the top of the board, under the tasks pinned before it", min: 1, max: 1, run: cmdPin},
+		{name: "unpin", args: task, help: "take a task's pin off", min: 1, max: 1, run: cmdUnpin},
 		{name: "adopt", args: task, help: "move a session from your tmux into the board's own tmux", min: 1, max: 1, run: cmdAdopt},
 		{name: "screen", args: task, help: "print what a task's terminal is showing", min: 1, max: 1, run: cmdScreen},
 		{name: "keys", args: task + " <key>...", help: "press keys in a task's terminal to answer a dialog, e.g. Down Enter", min: 2, max: -1, run: cmdKeys},
@@ -396,7 +398,7 @@ func cmdLs(e *env, p parsed) error {
 			format.Human(t.Age), format.Human(t.Idle),
 			e.paint(fmt.Sprintf("%9s", format.ContextCell(t.Context)), format.ContextLevel(t.Context)),
 			in, out, cache, format.Money(t.Cost), timer,
-			schedule, t.Title, closed)
+			schedule, format.PinMark(t)+t.Title, closed)
 		if t.State == "needs" {
 			e.printf("%s\n", e.paint(fmt.Sprintf("%-*s? %s", 149+width, "", t.Ask), "needs"))
 		}
@@ -797,6 +799,23 @@ func cmdTeam(e *env, p parsed) error {
 // memberCell is a task of a team in the TASK column, as taskCell draws it on the board.
 func memberCell(m api.Member) string {
 	return taskCell(format.Row{Task: &m.Task, Tree: m.Tree, Kids: m.Kids})
+}
+
+func cmdPin(e *env, p parsed) error { return pinTask(e, p.args[0], true) }
+
+func cmdUnpin(e *env, p parsed) error { return pinTask(e, p.args[0], false) }
+
+func pinTask(e *env, id string, pin bool) error {
+	t, err := e.client.Pin(id, pin)
+	if err != nil {
+		return err
+	}
+	done := "unpinned"
+	if pin {
+		done = "pinned to the top"
+	}
+	e.printf("%s  %s  %s\n", t.Short, done, t.Title)
+	return nil
 }
 
 func cmdStart(e *env, p parsed) error {

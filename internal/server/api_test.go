@@ -536,6 +536,28 @@ func TestADoneTaskStaysOnTheBoardUntilYouHideIt(t *testing.T) {
 	eq(t, f.task("t-open").Hidden, true)
 }
 
+func TestPinATaskToTheTop(t *testing.T) {
+	f := newFixture(t)
+	f.st.CreateTask(store.Task{ID: "t-pin", Title: "pin"}, "you")
+	f.st.Exec("UPDATE tasks SET updated_at = updated_at - 600")
+	before := f.task("t-pin").UpdatedAt
+
+	// A refused request changes nothing.
+	f.wantError(f.patch("/api/tasks/t-pin", obj{"title": "renamed", "pinned": "yes"}), 400)
+	eq(t, f.task("t-pin").Title, "pin")
+
+	// Pinning is not activity: the task keeps how long it has been idle.
+	got := f.ok(f.patch("/api/tasks/t-pin", obj{"pinned": true})).data
+	if got["pinned"] != true || got["pinned_at"].(float64) == 0 {
+		t.Errorf("not pinned: %v at %v", got["pinned"], got["pinned_at"])
+	}
+	eq(t, got["tags"], []any{"default", "pinned"})
+	eq(t, f.task("t-pin").UpdatedAt, before)
+	eq(t, f.ok(f.patch("/api/tasks/t-pin", obj{"pinned": false})).data["pinned"], false)
+	eq(t, f.task("t-pin").PinnedAt, 0.0)
+	eq(t, f.task("t-pin").UpdatedAt, before)
+}
+
 func TestReconcileClosesSessionsWhosePaneDisappeared(t *testing.T) {
 	f := newFixture(t)
 	f.tmux.known["%1"], f.tmux.known["%2"] = true, true

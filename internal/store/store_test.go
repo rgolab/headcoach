@@ -157,3 +157,55 @@ func TestInboxItems(t *testing.T) {
 		t.Errorf("a deleted child leaves %q", got)
 	}
 }
+
+func TestPinTask(t *testing.T) {
+	st, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for _, id := range []string{"first001", "second01"} {
+		if _, err := st.CreateTask(Task{ID: id, Title: id}, "you"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := st.Exec("UPDATE tasks SET updated_at = 1 WHERE id = ?", id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pinned := func(id string) float64 {
+		t.Helper()
+		task, err := st.Task(id)
+		if err != nil || task == nil {
+			t.Fatalf("task %s: %v", id, err)
+		}
+		if task.UpdatedAt != 1 {
+			t.Errorf("pinning %s counted as activity: updated_at %v", id, task.UpdatedAt)
+		}
+		return task.PinnedAt
+	}
+	if pinned("first001") != 0 {
+		t.Error("a new task is pinned")
+	}
+	for _, id := range []string{"first001", "second01"} {
+		if err := st.PinTask(id, true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, second := pinned("first001"), pinned("second01")
+	if first == 0 || second < first {
+		t.Errorf("pinned at %v then %v", first, second)
+	}
+	// Pinned again, the first keeps its place above the second.
+	if err := st.PinTask("first001", true); err != nil {
+		t.Fatal(err)
+	}
+	if again := pinned("first001"); again != first {
+		t.Errorf("pinned again, the first moved from %v to %v", first, again)
+	}
+	if err := st.PinTask("first001", false); err != nil {
+		t.Fatal(err)
+	}
+	if pinned("first001") != 0 || pinned("second01") != second {
+		t.Error("unpinning the first changed the pins")
+	}
+}

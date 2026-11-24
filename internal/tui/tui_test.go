@@ -105,6 +105,8 @@ func newDaemon(t *testing.T) *daemon {
 		default:
 			out := task("made0001", "backlog", 0)
 			out.Pane = "%7"
+			// A daemon from before pins, for the tasks named old, ignores them.
+			out.Pinned = strings.Contains(string(body), `"pinned":true`) && !strings.Contains(r.URL.Path, "old")
 			out.Detail = &api.Detail{Log: []transcript.Turn{{Who: "you", Text: "hello", Skipped: 3}, {Who: "tool", Text: "$ ls"},
 				{Who: "you", Text: "[from coordinator 1a2b3c4d] stop", From: "coordinator 1a2b3c4d"}},
 				Handoff: &api.Handoff{Path: "/state/handoff/made0001.md", Text: "## Status\nHalfway.",
@@ -212,6 +214,10 @@ func TestRowsOrderFilterAndDone(t *testing.T) {
 	m, _ = press(t, m, "d")
 	if len(m.keys) != 6 || m.keys[5] != "done0001" || strings.Contains(m.View(), "(1 hidden)") {
 		t.Errorf("with done tasks, rows = %v", m.keys)
+	}
+	m, _ = press(t, m, "o")
+	if m.order != "idle" || m.keys[len(m.keys)-1] != "need0001" || !strings.Contains(m.View(), "by idle") {
+		t.Errorf("sorted by %s, rows = %v", m.order, m.keys)
 	}
 	m, _ = press(t, m, "o", "o")
 	if m.order != "tokens" || m.keys[0] != "other001" || !strings.Contains(m.View(), "by tokens") {
@@ -1230,6 +1236,31 @@ func TestHideADoneTask(t *testing.T) {
 	m = run(t, m, cmd)
 	if !slices.Equal(d.calls[calls:], []string{`PATCH /api/tasks/done0001 {"hidden":true}`}) || m.notice != "1 task hidden, 2 skipped" {
 		t.Errorf("h sent %v, said %q", d.calls[calls:], m.notice)
+	}
+}
+
+func TestPinATask(t *testing.T) {
+	d := newDaemon(t)
+	pinned := task("pin00001", "running", 9)
+	pinned.PinnedAt = 100
+	m := loaded(t, d, task("run00001", "running", 5), pinned, task("old00001", "running", 7))
+	if m.keys[0] != "pin00001" || !strings.Contains(m.View(), "▲ title pin00001") {
+		t.Fatalf("the pinned task is not on top, marked: %v", m.keys)
+	}
+	m, cmd := press(t, m, "P")
+	m = run(t, m, cmd)
+	if !slices.Equal(d.calls, []string{`PATCH /api/tasks/pin00001 {"pinned":false}`}) || m.notice != "made0001 unpinned" {
+		t.Fatalf("P on a pinned task sent %v, said %q", d.calls, m.notice)
+	}
+	m, cmd = press(t, m, "down", "P")
+	m = run(t, m, cmd)
+	if d.calls[1] != `PATCH /api/tasks/run00001 {"pinned":true}` || m.notice != "made0001 pinned to the top" {
+		t.Fatalf("P on a task sent %v, said %q", d.calls, m.notice)
+	}
+	m, cmd = press(t, m, "down", "P")
+	m = run(t, m, cmd)
+	if d.calls[2] != `PATCH /api/tasks/old00001 {"pinned":true}` || !m.noticeAlarm || !strings.Contains(m.notice, "hc restart") {
+		t.Fatalf("P against an older daemon sent %v, said %q", d.calls, m.notice)
 	}
 }
 

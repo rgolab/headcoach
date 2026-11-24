@@ -18,7 +18,7 @@ import (
 )
 
 // Sorts are the orders a list of tasks can be shown in.
-var Sorts = []string{"state", "cost", "tokens", "ctx"}
+var Sorts = []string{"state", "idle", "cost", "tokens", "ctx"}
 
 // order is the rank of each state in a list: what needs you comes first.
 var order = map[string]int{"needs": 0, "running": 1, "review": 2, "backlog": 3, "parked": 4, "done": 5}
@@ -81,12 +81,15 @@ func Money(usd float64) string {
 	return fmt.Sprintf("$%.0f", usd)
 }
 
-// SortTasks returns the tasks by state then idle time, or with the biggest consumer of money, tokens
-// or context first. The input is left as it is.
+// SortTasks returns the tasks by state then idle time, by idle time alone with the most recently
+// active first, or with the biggest consumer of money, tokens or context first. Pinned tasks come
+// before the others whatever the order, the one pinned first on top. The input is left as it is.
 func SortTasks(tasks []api.Task, by string) []api.Task {
 	out := append([]api.Task(nil), tasks...)
 	var less func(a, b *api.Task) bool
 	switch by {
+	case "idle":
+		less = func(a, b *api.Task) bool { return a.Idle < b.Idle }
 	case "cost":
 		less = func(a, b *api.Task) bool { return a.Cost > b.Cost }
 	case "tokens":
@@ -101,8 +104,25 @@ func SortTasks(tasks []api.Task, by string) []api.Task {
 			return a.Idle < b.Idle
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return less(&out[i], &out[j]) })
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := &out[i], &out[j]
+		if (a.PinnedAt > 0) != (b.PinnedAt > 0) {
+			return a.PinnedAt > 0
+		}
+		if a.PinnedAt != b.PinnedAt {
+			return a.PinnedAt < b.PinnedAt
+		}
+		return less(a, b)
+	})
 	return out
+}
+
+// PinMark is what the title of a pinned task starts with. Empty for a task not pinned.
+func PinMark(t *api.Task) string {
+	if t.PinnedAt > 0 {
+		return "▲ "
+	}
+	return ""
 }
 
 // Row is one line of the tree: a task, or one of its child rows.

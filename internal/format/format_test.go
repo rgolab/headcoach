@@ -73,6 +73,10 @@ func TestSortTasks(t *testing.T) {
 	if tasks[0].ID != "done1" {
 		t.Error("the input was reordered")
 	}
+	want = []string{"done1", "park1", "run1", "need1", "back1", "rev1", "need2", "run2"}
+	if got := ids(SortTasks(tasks, "idle")); !reflect.DeepEqual(got, want) {
+		t.Errorf("by idle = %v", got)
+	}
 	if len(SortTasks(nil, "state")) != 0 {
 		t.Error("no tasks should sort to no tasks")
 	}
@@ -88,6 +92,36 @@ func TestSortTasks(t *testing.T) {
 		if got := ids(SortTasks(used, by)); !reflect.DeepEqual(got, want) {
 			t.Errorf("by %s = %v, want %v", by, got, want)
 		}
+	}
+}
+
+func TestSortTasksPinnedFirst(t *testing.T) {
+	first, second, need := task("first", "done", 50), task("second", "parked", 9), task("need", "needs", 1)
+	first.PinnedAt, second.PinnedAt = 100, 200
+	first.Agents = []api.Agent{{Name: "a1"}}
+	need.Cost = 9
+	tasks := []api.Task{need, second, first, task("run", "running", 2)}
+	for _, by := range Sorts {
+		if got := ids(SortTasks(tasks, by)); !reflect.DeepEqual(got[:2], []string{"first", "second"}) {
+			t.Errorf("by %s = %v, want the pinned tasks first, the first pinned on top", by, got)
+		}
+	}
+	// Its sub-agents and the tasks it drives go up with it. A pinned task under a parent that is not
+	// pinned stays under it, first of the tasks its parent drives.
+	kid, other, top := task("kid", "running", 30), task("other", "needs", 1), task("top", "review", 5)
+	kid.Parent, other.Parent = "first", "top"
+	under := task("under", "running", 40)
+	under.Parent, under.PinnedAt = "top", 300
+	var got []string
+	for _, row := range TreeRows(append(tasks, kid, other, top, under), "state") {
+		if row.Agent != nil {
+			got = append(got, row.Agent.Name)
+			continue
+		}
+		got = append(got, row.Task.ID)
+	}
+	if want := []string{"first", "a1", "kid", "second", "need", "run", "top", "under", "other"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("rows = %v, want %v", got, want)
 	}
 }
 

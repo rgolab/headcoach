@@ -1550,6 +1550,18 @@ func (m model) boardKey(key string) (tea.Model, tea.Cmd) {
 		}
 		return m, m.act("PATCH", path, map[string]bool{"hidden": true},
 			func(t api.Task) string { return t.Short + " hidden, d shows it" })
+	case "P":
+		c, id, pin := m.client, t.ID, t.PinnedAt == 0
+		return m, func() tea.Msg {
+			t, err := c.Pin(id, pin)
+			if err != nil {
+				return doneMsg{err: err}
+			}
+			if pin {
+				return doneMsg{notice: t.Short + " pinned to the top"}
+			}
+			return doneMsg{notice: t.Short + " unpinned"}
+		}
 	case "x":
 		id := t.ID
 		m.note("Delete", "Delete "+t.Short+" "+board.Clip(t.Title, 50)+"?  y / n", func() tea.Cmd {

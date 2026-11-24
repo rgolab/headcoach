@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -60,5 +61,19 @@ func TestCallerHeaders(t *testing.T) {
 	}
 	if got.Get("X-HC-Session") != "s1" || got.Get("X-HC-Task") != "t1" || got.Get("X-HC-Agent") != "1" {
 		t.Errorf("inside a session: %v", got)
+	}
+}
+
+// A daemon from before pins answers with the task as it was: the pin did not happen, and says so.
+func TestPinAgainstAnOlderDaemon(t *testing.T) {
+	old := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]string{"id": "task0001", "short": "task0001"})
+	}))
+	defer old.Close()
+	if _, err := New(old.URL).Pin("task0001", true); err == nil || !strings.Contains(err.Error(), "hc restart") {
+		t.Errorf("pin against an older daemon: %v", err)
+	}
+	if _, err := New(old.URL).Pin("task0001", false); err != nil {
+		t.Errorf("unpin against an older daemon: %v", err)
 	}
 }
