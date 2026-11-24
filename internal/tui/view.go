@@ -45,14 +45,14 @@ const (
 	headerHeight = 6 // lines of the k9s-style block above the table
 	help         = `j / k, arrows   move the cursor
 g / G           go to the top or the bottom; pgup / pgdn move a page
+a               attach: enter the session in this terminal, Ctrl-] comes back; a sub-agent enters
+                its main session
 enter           open the task: metadata, history, session log
 r               reply to the session; on a question, answer it in its "Type something" option
 q               question: ask about the session without touching it; enter alone gives a summary
 t               title: rename the task
 m               move the task to another state
 p               park the task: close its tmux pane, keep the session for later
-a               attach: enter the session in this terminal, Ctrl-] comes back; a sub-agent enters
-                its main session
 A               adopt: swallow a session from your own tmux into the board's tmux
 s               start or resume the session in a new tmux window
 n               new task: its folder (tab lists the folders, a missing one is created), the profile when
@@ -95,7 +95,7 @@ type hint struct{ key, does string }
 
 // hintKeys are the keys shown in the header, k9s style, in columns. The full list is behind ?.
 var hintKeys = [][]hint{
-	{{"enter", "view"}, {"r", "reply"}, {"t", "title"}, {"m", "move"}, {"p", "park"}, {"a", "attach"}},
+	{{"a", "attach"}, {"enter", "view"}, {"r", "reply"}, {"t", "title"}, {"m", "move"}, {"p", "park"}},
 	{{"A", "adopt"}, {"s", "start"}, {"n", "new"}, {"x", "delete"}, {"/", "filter"}, {"?", "help"}},
 	{{"S", "schedules"}, {"q", "ask"}, {"o", "order"}, {"d", "done"}, {":", "command"}, {"Q", "quit"}},
 	{{"c", "copy"}, {"R", "review"}, {"u", "update"}, {"v", "select"}, {"C", "columns"}, {"w", "team"}},

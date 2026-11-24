@@ -19,6 +19,7 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 ### Changed
 
 - `/` filters the board with a fuzzy match: `hcfz` finds "headcoach fuzzy filter", and the cursor goes to the task that fits best
+- `a`, which enters a session, comes first in the keys at the top of the board and in its help
 
 ## [1.0.0] - 2026-11-23
 

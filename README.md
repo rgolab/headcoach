@@ -69,8 +69,8 @@ Then:
 | Key | Action |
 |---|---|
 | `j` `k`, arrows | move the cursor; `g` `G` go to the top or the bottom, `pgup` `pgdn` move a page |
-| `enter` | open the session: details, history, log |
 | `a` | enter the session, `Ctrl-]` comes back; on a sub-agent, its main session |
+| `enter` | open the session: details, history, log |
 | `q` | ask about the session without touching it |
 | `r` | reply to the session; on a question, the answer goes in its "Type something" option |
 | `n` | new session: its folder, its profile, then its title; `tab` lists the folders |

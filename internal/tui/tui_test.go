@@ -2008,6 +2008,16 @@ func TestXDeletesInTenMinutesWithoutAQuestion(t *testing.T) {
 	}
 }
 
+func TestAttachIsTheFirstKey(t *testing.T) {
+	m := loaded(t, nil, task("run00001", "running", 1))
+	if first := m.header()[0]; !regexp.MustCompile(`<a> +attach +<A> +adopt`).MatchString(first) {
+		t.Errorf("the hints do not open on attach: %q", first)
+	}
+	if a, enter := strings.Index(help, "\na "), strings.Index(help, "\nenter "); a < 0 || a > enter {
+		t.Errorf("the help lists attach after enter:\n%s", help)
+	}
+}
+
 func TestTheModelColumn(t *testing.T) {
 	chosen := task("cho00001", "running", 1)
 	chosen.Model, chosen.SessionModel = "claude-sonnet-4-5", "claude-opus-4-5"
