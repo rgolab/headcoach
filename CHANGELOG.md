@@ -13,6 +13,7 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 - `hc team`, `w` on the board, and the web detail show what a task drives: each task under it, where it stands, and what waits on you among them
 - while you type the filter, the up and down arrows move the cursor, so you pick a task without leaving the line
 - `o` on the board orders the tasks by idle time too, the most recently active first; so do `hc ls --sort idle` and the web board's Sort menu
+- `P` pins a task to the top of the board with its sub-agents and the tasks it drives, whatever the order, a second pin under the first; `hc pin` and `hc unpin` do the same, and so does Pin to top in the web board's task panel
 
 ### Changed
 

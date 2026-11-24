@@ -198,6 +198,22 @@ func TestLs(t *testing.T) {
 	if code, _, errOut := f.hc("ls", "--sort", "size"); code != 2 || !strings.Contains(errOut, "cannot sort by 'size'") {
 		t.Errorf("a bad sort gave %d %q", code, errOut)
 	}
+
+	// A pinned task goes on top with its sub-agents, its title marked.
+	if out := f.ok("pin", "run00001"); out != "run00001  pinned to the top  /developer title run00001\n" {
+		t.Errorf("pin printed %q", out)
+	}
+	lines = strings.Split(strings.TrimRight(f.ok("ls"), "\n"), "\n")
+	if !strings.HasPrefix(lines[1], "run00001") || !strings.HasSuffix(lines[1], "  ▲ /developer title run00001") ||
+		!strings.HasSuffix(lines[2], "└─ Explore: ") || !strings.HasPrefix(lines[3], "need0001") {
+		t.Errorf("ls with a pin:\n%s", strings.Join(lines, "\n"))
+	}
+	if out := f.ok("unpin", "run00001"); out != "run00001  unpinned  /developer title run00001\n" {
+		t.Errorf("unpin printed %q", out)
+	}
+	if lines = strings.Split(f.ok("ls"), "\n"); !strings.HasPrefix(lines[1], "need0001") {
+		t.Errorf("ls after unpin:\n%s", strings.Join(lines, "\n"))
+	}
 }
 
 // A reply an agent sends from its session reaches the other task with a label, and show names the sender.

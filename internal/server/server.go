@@ -619,6 +619,9 @@ func (s *Server) view(task *store.Task, detail bool) (*api.Task, error) {
 	if task.Source == "schedule" {
 		tags = append(tags, "schedule")
 	}
+	if task.PinnedAt > 0 {
+		tags = append(tags, "pinned")
+	}
 	out := &api.Task{
 		Task:        *task,
 		Short:       board.Short(task.ID),
@@ -628,6 +631,7 @@ func (s *Server) view(task *store.Task, detail bool) (*api.Task, error) {
 		Age:         int(now - task.CreatedAt),
 		Idle:        int(now - task.UpdatedAt),
 		CanReply:    !isDialog(task),
+		Pinned:      task.PinnedAt > 0,
 		TimerLeft:   timerLeft(task, now),
 		Tags:        tags,
 		Links:       []api.Link{},
@@ -1141,6 +1145,10 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 	if _, ok := data["hidden"]; ok && !hide {
 		return nil, fail(400, "hidden is true or false")
 	}
+	pinned, pin := data["pinned"].(bool)
+	if _, ok := data["pinned"]; ok && !pin {
+		return nil, fail(400, "pinned is true or false")
+	}
 	// Checked before any change: a refused request changes nothing.
 	if state, ok := data["state"].(string); hidden && (ok && state != "done" || !ok && task.State != "done") {
 		return nil, fail(400, "Only a done task can be hidden")
@@ -1216,6 +1224,11 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 	if hide {
 		// After the move: a move to Done shows the task again.
 		if err := s.st.HideTask(task.ID, hidden); err != nil {
+			return nil, err
+		}
+	}
+	if pin {
+		if err := s.st.PinTask(task.ID, pinned); err != nil {
 			return nil, err
 		}
 	}

@@ -141,6 +141,16 @@ func (c *Client) Do(method, path string, in any) (api.Task, error) {
 	return out, err
 }
 
+// Pin pins a task to the top of the board, or unpins it. A daemon too old to know pins ignores the
+// request: that is an error, not a pin that never happens.
+func (c *Client) Pin(id string, pin bool) (api.Task, error) {
+	t, err := c.Do("PATCH", "/api/tasks/"+id, map[string]bool{"pinned": pin})
+	if err == nil && t.Pinned != pin {
+		err = errors.New("The daemon runs an older hc that cannot pin: restart it with hc restart")
+	}
+	return t, err
+}
+
 // Enter returns the command that takes this terminal into a task's session in the board's tmux,
 // starting the session if needed.
 //

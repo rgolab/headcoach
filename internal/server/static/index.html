@@ -348,12 +348,14 @@ function ctxHtml(c) {
 const money = usd => !usd ? "" : "$" + (usd < 10 ? usd.toFixed(2) : usd < 100 ? usd.toFixed(1) : usd.toFixed(0));
 const costHtml = t => t.cost ? `<span class="tok" title="What Claude Code prices this task at, at API rates">${money(t.cost)}</span>` : "";
 const total = t => { const k = t.tokens || {}; return (k.in || 0) + (k.out || 0) + (k.cache_read || 0) + (k.cache_write || 0); };
+// Pinned tasks go first whatever the order, the one pinned first on top; the others keep their order.
+const pinFirst = list => list.slice().sort((a, b) => b.pinned - a.pinned || a.pinned_at - b.pinned_at);
 function sorted(list) {
-  if (sortBy === "idle") return list.slice().sort((a, b) => a.idle - b.idle);
-  if (sortBy === "cost") return list.slice().sort((a, b) => (b.cost || 0) - (a.cost || 0));
-  if (sortBy === "tokens") return list.slice().sort((a, b) => total(b) - total(a));
-  if (sortBy === "ctx") return list.slice().sort((a, b) => ((b.context || {}).tokens || 0) - ((a.context || {}).tokens || 0));
-  return list.slice().sort((a, b) => ORDER.indexOf(a.state) - ORDER.indexOf(b.state) || a.idle - b.idle);
+  if (sortBy === "idle") return pinFirst(list.slice().sort((a, b) => a.idle - b.idle));
+  if (sortBy === "cost") return pinFirst(list.slice().sort((a, b) => (b.cost || 0) - (a.cost || 0)));
+  if (sortBy === "tokens") return pinFirst(list.slice().sort((a, b) => total(b) - total(a)));
+  if (sortBy === "ctx") return pinFirst(list.slice().sort((a, b) => ((b.context || {}).tokens || 0) - ((a.context || {}).tokens || 0)));
+  return pinFirst(list.slice().sort((a, b) => ORDER.indexOf(a.state) - ORDER.indexOf(b.state) || a.idle - b.idle));
 }
 function renderLimits(limits) {
   const several = new Set(limits.map(l => l.profile)).size > 1;  // one account needs no name
@@ -524,7 +526,7 @@ function renderBoard() {
   el.className = view === "list" ? "list" : "board";
   if (view === "list") { el.innerHTML = listHtml(); return; }
   el.innerHTML = STATES.map(s => {
-    const list = (sortBy === "state" ? tasks : sorted(tasks)).filter(t => t.state === s.id);
+    const list = (sortBy === "state" ? pinFirst(tasks) : sorted(tasks)).filter(t => t.state === s.id);
     return `<section class="col s-${s.id}" data-state="${s.id}">
       <div class="col-head"><span class="dot"></span><h2>${s.name}</h2><span class="n">${list.length}</span></div>
       <div class="cards">${list.map(cardHtml).join("") || `<div class="empty">Nothing here</div>`}</div>
@@ -588,6 +590,7 @@ function renderDrawer() {
       <div class="moverow"><label for="moveto">Move to</label>
         <select id="moveto">${STATES.map(s => `<option value="${s.id}"${s.id === t.state ? " selected" : ""}>${s.name}</option>`).join("")}</select>
         ${inBoard ? "" : `<button class="btn small" type="button" id="term">${termLabel}</button>`}
+        <button class="btn small" type="button" id="pin">${t.pinned ? "Unpin" : "Pin to top"}</button>
         <button class="btn small danger" type="button" id="del">${confirmDelete ? "Confirm delete" : "Delete"}</button>
       </div>
     </div>
@@ -636,7 +639,7 @@ async function refresh(force) {
     const data = await api("GET", "/api/tasks");
     $("#conn").classList.remove("down"); $("#conn-text").textContent = "live";
     loaded = true;
-    const sig = JSON.stringify(data.tasks.map(t => [t.id, t.parent, t.state, t.title, t.last, t.ask, t.live, t.repo, t.agents, t.tags, t.links, t.persona, t.tokens, t.context, t.cost, Math.floor(t.age / 60), Math.floor(t.idle / 60), t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]));
+    const sig = JSON.stringify(data.tasks.map(t => [t.id, t.parent, t.state, t.title, t.pinned_at, t.last, t.ask, t.live, t.repo, t.agents, t.tags, t.links, t.persona, t.tokens, t.context, t.cost, Math.floor(t.age / 60), Math.floor(t.idle / 60), t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]));
     const was = new Map(tasks.map(t => [t.id, t.state])), now = Date.now();
     for (const id in litAt) if (now - litAt[id] >= LIT_MS) delete litAt[id];
     for (const t of data.tasks) if (was.has(t.id) && was.get(t.id) !== "done" && t.state === "done") litAt[t.id] = now;
@@ -649,7 +652,7 @@ async function refresh(force) {
   if (openId) {
     try {
       const t = await api("GET", "/api/tasks/" + openId);
-      const sig = JSON.stringify([t.state, t.title, t.ask, t.live, t.persona, t.pane, t.attach, t.branch, t.agents, t.handoff && t.handoff.updated_at, t.tokens, t.context, t.cost, t.history.length, t.log.length, t.log.slice(-1), t.resume, t.screen, confirmDelete, t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]);
+      const sig = JSON.stringify([t.state, t.title, t.pinned, t.ask, t.live, t.persona, t.pane, t.attach, t.branch, t.agents, t.handoff && t.handoff.updated_at, t.tokens, t.context, t.cost, t.history.length, t.log.length, t.log.slice(-1), t.resume, t.screen, confirmDelete, t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]);
       // A task that drives others shows them too.
       const tm = tasks.some(x => x.parent === t.id) ? await api("GET", `/api/tasks/${t.id}/team`) : null;
       const teamSig = tm && JSON.stringify([tm.on_you, tm.members.map(m => [m.id, m.depth, m.state, m.title, m.handoff, m.state === "needs" ? m.ask : m.last])]);
@@ -678,6 +681,7 @@ document.addEventListener("click", e => {
   if (t.id === "close" || t.id === "scrim") { closeDrawer(); return; }
   if (t.dataset.key) { act(() => api("POST", `/api/tasks/${openId}/keys`, { keys: [t.dataset.key] })); return; }
   if (t.id === "term") { act(() => api("POST", `/api/tasks/${openId}/focus`)); return; }
+  if (t.id === "pin") { act(() => api("PATCH", `/api/tasks/${openId}`, { pinned: !detail.pinned })); return; }
   if (t.id === "del") {
     if (!confirmDelete) { confirmDelete = true; renderDrawer(); return; }
     const id = openId; closeDrawer(); act(() => api("DELETE", `/api/tasks/${id}`)); return;

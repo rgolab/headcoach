@@ -82,7 +82,8 @@ func Money(usd float64) string {
 }
 
 // SortTasks returns the tasks by state then idle time, by idle time alone with the most recently
-// active first, or with the biggest consumer of money, tokens or context first. The input is left as it is.
+// active first, or with the biggest consumer of money, tokens or context first. Pinned tasks come
+// before the others whatever the order, the one pinned first on top. The input is left as it is.
 func SortTasks(tasks []api.Task, by string) []api.Task {
 	out := append([]api.Task(nil), tasks...)
 	var less func(a, b *api.Task) bool
@@ -103,8 +104,25 @@ func SortTasks(tasks []api.Task, by string) []api.Task {
 			return a.Idle < b.Idle
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return less(&out[i], &out[j]) })
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := &out[i], &out[j]
+		if (a.PinnedAt > 0) != (b.PinnedAt > 0) {
+			return a.PinnedAt > 0
+		}
+		if a.PinnedAt != b.PinnedAt {
+			return a.PinnedAt < b.PinnedAt
+		}
+		return less(a, b)
+	})
 	return out
+}
+
+// PinMark is what the title of a pinned task starts with. Empty for a task not pinned.
+func PinMark(t *api.Task) string {
+	if t.PinnedAt > 0 {
+		return "▲ "
+	}
+	return ""
 }
 
 // Row is one line of the tree: a task, or one of its child rows.

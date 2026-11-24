@@ -85,6 +85,8 @@ type Task struct {
 	Age       int      `json:"age"`
 	Idle      int      `json:"idle"`
 	CanReply  bool     `json:"can_reply"`
+	// Pinned says the task is pinned to the top of the board; PinnedAt says since when.
+	Pinned bool `json:"pinned"`
 	// TimerLeft is how many seconds the task's timer has left before it closes the task. Zero: no timer.
 	TimerLeft int      `json:"timer_left"`
 	Tags      []string `json:"tags"`

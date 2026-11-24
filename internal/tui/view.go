@@ -67,6 +67,8 @@ v               select: space ticks the task under the cursor, then x deletes, m
 :               command line: update, restart, columns, help, q
 u               update: install the latest release, after its notes and a yes; the board reloads itself
 o               order: by state, by idle time, by cost, by tokens used, by context size
+P               pin the task to the top of the board, in any order, or unpin it; a second pin goes
+                under the first
 h               hide a done task, or show a hidden one again
 d               show or hide the hidden done tasks
 S               schedules: tasks that start themselves at a time of day, or on a cron line
@@ -265,7 +267,7 @@ func rowCells(row format.Row) []cell {
 	if persona == "" {
 		persona, personaStyle = "-", dim
 	}
-	title := board.Clip(t.Title, 60)
+	title := format.PinMark(t) + board.Clip(t.Title, 60)
 	if format.Closed(t) {
 		title += " (closed)"
 	}

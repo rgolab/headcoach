@@ -29,6 +29,7 @@ The same board in the browser:
 - the top of the board shows how much of your 5 hour and 7 day limits is used, see [Limits and cost](#limits-and-cost)
 - you enter a session with one key, leave it with another, and it keeps running
 - you ask a question about a session without interrupting it
+- you pin a task to the top of the board, with its sub-agents and the tasks it drives, whatever the order
 - a task can carry a timer, and closes itself when it runs out
 - a task or a schedule can pick the model and the effort level its sessions start with
 - the review queue shows what waits on you in Review, and how big each change is
@@ -84,6 +85,7 @@ Then:
 | `p` | park: close the session, keep it for later |
 | `m` | move to another state |
 | `o` | order by state, idle time, cost, tokens or context |
+| `P` | pin to the top, in any order, with its sub-agents and the tasks it drives, its title marked ▲; a second pin goes under the first, and a task under a parent goes first among its parent's tasks; `P` again unpins; a pin stays until you take it off, in Done too |
 | `/` | fuzzy filter by title, repo or task id: `hcfz` finds "headcoach fuzzy", the cursor goes to the best fit, the arrows move it as you type |
 | `:` | command line: `update` installs the latest release, `restart` restarts the daemon, `columns` opens the columns, `help`, `q` |
 | `u` | update: install the latest release, after its notes and a yes |
@@ -112,6 +114,7 @@ Then:
 - `hc inbox [<id>]` lists what a task heard from the tasks it drives
 - `hc handoff [init | path] [<id>]` prints a task's handoff file, `hc reset <id>` starts it again from there
 - `hc team [<id>]` shows the tasks a task drives, where each stands, and what waits on you among them
+- `hc pin <id>` pins a task to the top of the board, under those pinned before it, `hc unpin <id>` takes the pin off; `hc ls` marks its title with ▲, the web board tags it `pinned`, and its panel has a Pin to top button
 - `hc move <id> <state>` moves a session, the state as the board shows it, `Running` or `Needs me`, and `Parked` closes it
 - `hc adopt <id>` moves a session from your tmux into the board's
 - `hc limits` shows each limit and when it resets
