@@ -12,6 +12,10 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 - each task can keep a handoff file, where the work stands, outside the checkout: `hc handoff` prints it, `hc show` and the boards sum it up, and `hc reset` clears a task's context and points the fresh one at it
 - `hc team`, `w` on the board, and the web detail show what a task drives: each task under it, where it stands, and what waits on you among them
 
+### Changed
+
+- `/` filters the board with a fuzzy match: `hcfz` finds "headcoach fuzzy filter", and the cursor goes to the task that fits best
+
 ## [1.0.0] - 2026-11-23
 
 The first public release of headcoach. `hc` puts every Claude Code session on one board, in the terminal and in the browser, so you see what each agent does, what waits on you, and what it costs.
