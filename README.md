@@ -62,7 +62,7 @@ Then:
 
 - `hc hooks install` connects Claude Code to the board
 - `hc service install` starts the daemon now and at every login
-- `hc` opens the board
+- `hc` opens the board; the first one shows how it works, once
 
 ## Keys
 
@@ -277,6 +277,7 @@ Then:
 - `theme` picks the board's colors: `terminal` (follows your terminal), `bright`, `nord` or `k9s`
 - `hc tui --theme k9s` tries a theme without touching the config
 - `C` on the board saves its columns to `columns` next to the board's database, one name per line, a hidden one after a `-`
+- `welcomed` next to the board's database says the board showed its welcome; delete it to see the welcome again
 - `test_pattern` names the commands that run tests, for the review queue, by default `make check`, `go test`, `npm test`, `pytest` and the like; `""` turns it off
 - `persona_pattern` names the skills that count as a persona, by default `(^|[-_])(developer|reviewer|architect|researcher|planner|tester)($|[-_])`
 - `workdir = "~/code"` makes `hc new -C myidea` mean `~/code/myidea`

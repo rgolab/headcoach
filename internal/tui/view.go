@@ -81,6 +81,19 @@ C               columns: show, hide and reorder the columns of the board, kept a
 Q               quit (q or escape closes a view)`
 )
 
+// welcome is the note the first board shows, to a user who has not met it yet.
+const welcome = `Every Claude Code session shows up here as a task, the moment you send its first prompt.
+A task that waits on you moves to Needs me or Review.
+
+a        enter the session under the cursor, and work in it as in any terminal
+Ctrl-]   leave the session and come back here: it keeps running
+enter    open the task: what it did, its history, its log
+q        ask about the session without interrupting it
+n        start a new session: its folder, its profile, then its title
+?        every key
+
+This note shows once. Any key closes it.`
+
 var logo = []string{
 	"  _          ",
 	" | |__   ___ ",

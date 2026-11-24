@@ -2018,6 +2018,42 @@ func TestAttachIsTheFirstKey(t *testing.T) {
 	}
 }
 
+func TestTheFirstBoardWelcomesOnce(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state", "welcomed")
+	m := loaded(t, nil, task("run00001", "running", 1))
+	m.welcome(path, true)
+	if m.view != viewNote || !strings.Contains(m.View(), "Welcome to headcoach") || !strings.Contains(m.View(), "Ctrl-]") {
+		t.Fatalf("the first board did not welcome:\n%s", m.View())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("the welcome left no trace: %v", err)
+	}
+	// Any key closes it, and is not taken as a key of the board.
+	m, cmd := press(t, m, "a")
+	if m.view != viewBoard || cmd != nil {
+		t.Errorf("a key did not just close the welcome: view %d", m.view)
+	}
+
+	// The next board goes straight to work.
+	m = loaded(t, nil, task("run00001", "running", 1))
+	m.welcome(path, true)
+	if m.view != viewBoard {
+		t.Errorf("the welcome showed twice:\n%s", m.View())
+	}
+	m.welcome("", true)
+	if m.view != viewBoard {
+		t.Error("a board without a state folder welcomed")
+	}
+
+	// A board reloaded after an update says nothing, and is past its welcome from then on.
+	other := filepath.Join(dir, "welcomed")
+	m.welcome(other, false)
+	if _, err := os.Stat(other); m.view != viewBoard || err != nil {
+		t.Errorf("a reloaded board: view %d, marker %v", m.view, err)
+	}
+}
+
 func TestTheModelColumn(t *testing.T) {
 	chosen := task("cho00001", "running", 1)
 	chosen.Model, chosen.SessionModel = "claude-sonnet-4-5", "claude-opus-4-5"

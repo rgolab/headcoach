@@ -15,6 +15,7 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 - `o` on the board orders the tasks by idle time too, the most recently active first; so do `hc ls --sort idle` and the web board's Sort menu
 - `P` pins a task to the top of the board with its sub-agents and the tasks it drives, whatever the order, a second pin under the first; `hc pin` and `hc unpin` do the same, and so does Pin to top in the web board's task panel
 - `X` deletes a task from the board 10 minutes later, without a question; the ⏱ column counts down with a `✗`, and `X` again keeps the task
+- the first board you open shows how it works, once: `a` enters a session, `Ctrl-]` comes back to the board
 
 ### Changed
 
