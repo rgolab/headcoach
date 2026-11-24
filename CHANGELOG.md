@@ -4,6 +4,10 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-25
+
+A task can now drive other tasks: it hands them work, and the board tells it when one stops or needs you. The board also gets a fuzzy filter, pins, an order by idle time, and a delete on a timer.
+
 ### Added
 
 - a message `hc reply` sends from inside a session starts with its sender, such as `[from task 1a2b3c4d]`, so the other session never takes it for your words; `hc show`, the detail and the web board name the sender too
@@ -43,5 +47,6 @@ The first public release of headcoach. `hc` puts every Claude Code session on on
 - `hc update`, or `u` on the board, installs the latest release, checked against its `SHA256SUMS`
 - four themes: `terminal`, `bright`, `nord` and `k9s`
 
-[Unreleased]: https://github.com/humblebundledore/headcoach/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/humblebundledore/headcoach/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/humblebundledore/headcoach/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/humblebundledore/headcoach/releases/tag/v1.0.0
