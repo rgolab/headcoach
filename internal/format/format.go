@@ -9,6 +9,7 @@ import (
 
 	"github.com/humblebundledore/headcoach/internal/api"
 	"github.com/humblebundledore/headcoach/internal/board"
+	"github.com/humblebundledore/headcoach/internal/handoff"
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/schedule"
@@ -238,14 +239,45 @@ func HandoffLines(h api.Handoff, now time.Time) []string {
 	if len(sum.Next) > 0 {
 		add("next", strings.Join(sum.Next, "; "))
 	}
-	if q := sum.Queue; q.Open+q.Done > 0 {
-		queue := fmt.Sprintf("%d open, %d done", q.Open, q.Done)
-		if q.Next != "" {
+	if queue := QueueCell(sum.Queue); queue != "" {
+		if q := sum.Queue; q.Next != "" {
 			queue += ", next: " + q.Next
 		}
 		add("queue", queue)
 	}
 	return out
+}
+
+// Where says where a task under a coordinator stands, in a line: the status of its handoff, else the
+// question it asks, else its last line.
+func Where(m api.Member) string {
+	switch {
+	case m.Handoff.Status != "":
+		return m.Handoff.Status
+	case m.State == "needs":
+		return m.Ask
+	}
+	return m.Last
+}
+
+// QueueCell counts the queue of a handoff: "2 open, 3 done", empty without one.
+func QueueCell(q handoff.Queue) string {
+	if q.Open+q.Done == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d open, %d done", q.Open, q.Done)
+}
+
+// OnYouWhat says what waits on you, after the kind of wait: a question, a change in Review, or a line of
+// a handoff file.
+func OnYouWhat(o api.OnYou) string {
+	switch o.Kind {
+	case "needs":
+		return "asks: " + o.What
+	case "review":
+		return "in Review: " + o.What
+	}
+	return o.What
 }
 
 // ContextLevel tells how full the context window is: empty, ok, warm or hot. The colours of the gauge

@@ -281,6 +281,41 @@ func TestInbox(t *testing.T) {
 	}
 }
 
+// hc team shows the tasks under a task, where each stands, and what waits on you among them.
+func TestTeam(t *testing.T) {
+	f := newFixture(t)
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "coordinate"})
+	if out := f.ok("team", "abcd"); !strings.Contains(out, "No task under it. Put one there with: hc new --parent abcd1234") {
+		t.Errorf("an empty team: %q", out)
+	}
+	child := strings.Fields(f.ok("new", "-t", "Child", "--parent", "abcd", "do it"))[0]
+	grandchild := strings.Fields(f.ok("new", "-t", "Grandchild", "--parent", child, "do that"))[0]
+	f.ok("move", grandchild, "review")
+	path := strings.TrimSpace(f.ok("handoff", "path", child))
+	os.MkdirAll(filepath.Dir(path), 0o755)
+	os.WriteFile(path, []byte("## Status\nHalfway.\n## Waiting\n- on you: a go\n## Queue\n- [x] one\n- [ ] two\n"), 0o644)
+	out := f.ok("team", "abcd")
+	for _, piece := range []string{
+		"abcd1234  Running  coordinate\n",
+		"Waits on you\n  " + child + "  Child                           a go\n  " + grandchild + "  Grandchild                      in Review: Moved by you\n",
+		"\n" + child + " ▾ 1  Backlog    ", "s  1 open, 1 done    Child                                     Halfway.\n",
+		"\n└─ " + grandchild + "   Review     ", "s  -                 Grandchild                                Moved by you\n",
+	} {
+		if !strings.Contains(out, piece) {
+			t.Errorf("team lacks %q:\n%s", piece, out)
+		}
+	}
+	// From inside the coordinator's session, it is the default.
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "abcd1234-s1")
+	if got := f.ok("team"); got != out {
+		t.Errorf("team from the session = %q", got)
+	}
+	var team api.Team
+	if err := json.Unmarshal([]byte(f.ok("team", "--json")), &team); err != nil || len(team.Members) != 2 || team.Members[1].Depth != 1 {
+		t.Errorf("--json: %+v %v", team, err)
+	}
+}
+
 // hc handoff prints a task's handoff, init writes the template, path says where it goes; show sums it up.
 func TestHandoff(t *testing.T) {
 	f := newFixture(t)

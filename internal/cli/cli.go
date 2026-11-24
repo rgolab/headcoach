@@ -118,6 +118,7 @@ func init() {
 		{name: "unlink", args: task, help: "take a task from under its parent", min: 1, max: 1, run: cmdUnlink},
 		{name: "handoff", args: "[init | path] [" + task + "]", help: "print a task's handoff file; init writes the template, path prints where it goes (default: self)", max: 2, run: cmdHandoff, flags: []flag{jsonFlag}},
 		{name: "reset", args: task, help: "clear a task's context between two turns, and point the fresh one at its handoff", min: 1, max: 1, run: cmdReset},
+		{name: "team", args: "[" + task + "]", help: "a coordinator's view: the tasks it drives, where each stands, and what waits on you (default: self)", max: 1, run: cmdTeam, flags: []flag{jsonFlag}},
 		{name: "inbox", args: "[" + task + "]", help: "what a task heard from the tasks it drives, and what waits to be said (default: self)", max: 1, run: cmdInbox, flags: []flag{jsonFlag}},
 		{name: "review", help: "list the tasks in Review, the one waiting longest first, with their change", run: cmdReview, flags: []flag{jsonFlag}},
 		{name: "start", args: task, help: "start or resume a task in a new tmux window", min: 1, max: 1, run: cmdStart},
@@ -752,6 +753,50 @@ func cmdReset(e *env, p parsed) error {
 	}
 	e.printf("%s  cleared, and pointed at its handoff\n", t.Short)
 	return nil
+}
+
+func cmdTeam(e *env, p parsed) error {
+	id := "self"
+	if len(p.args) > 0 {
+		id = p.args[0]
+	}
+	var team api.Team
+	if err := e.client.Call("GET", "/api/tasks/"+id+"/team", nil, &team); err != nil {
+		return err
+	}
+	if p.has("json") {
+		return e.json(team)
+	}
+	t := team.Task
+	e.printf("%s  %s  %s\n", t.Short, e.paint(t.StateName, t.State), t.Title)
+	if team.Handoff.Status != "" {
+		e.printf("  %s\n", team.Handoff.Status)
+	}
+	if len(team.OnYou) > 0 {
+		e.printf("\n%s\n", e.paint("Waits on you", "needs"))
+		for _, o := range team.OnYou {
+			e.printf("  %-8s  %-30s  %s\n", o.Short, cut(o.Title, 30), format.OnYouWhat(o))
+		}
+	}
+	if len(team.Members) == 0 {
+		e.printf("\nNo task under it. Put one there with: hc new --parent %s, or hc link <task> %s\n", t.Short, t.Short)
+		return nil
+	}
+	width := 8
+	for _, m := range team.Members {
+		width = max(width, utf8.RuneCountInString(memberCell(m)))
+	}
+	e.printf("\n%s\n", e.paint(fmt.Sprintf("%-*s  %-9s %5s  %-16s  %-40s  %s", width, "TASK", "STATE", "IDLE", "QUEUE", "TITLE", "WHERE IT STANDS"), "dim"))
+	for _, m := range team.Members {
+		e.printf("%-*s  %s %5s  %-16s  %-40s  %s\n", width, memberCell(m), e.paint(fmt.Sprintf("%-9s", m.StateName), m.State),
+			format.Human(m.Idle), orDash(format.QueueCell(m.Handoff.Queue)), cut(m.Title, 40), cut(format.Where(m), 100))
+	}
+	return nil
+}
+
+// memberCell is a task of a team in the TASK column, as taskCell draws it on the board.
+func memberCell(m api.Member) string {
+	return taskCell(format.Row{Task: &m.Task, Tree: m.Tree, Kids: m.Kids})
 }
 
 func cmdStart(e *env, p parsed) error {

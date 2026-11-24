@@ -5,8 +5,10 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/humblebundledore/headcoach/internal/api"
+	"github.com/humblebundledore/headcoach/internal/handoff"
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/store"
@@ -305,4 +307,40 @@ func TestWho(t *testing.T) {
 			t.Errorf("Who(%+v) = %q, want %q", c.turn, got, c.want)
 		}
 	}
+}
+
+func TestHandoffLines(t *testing.T) {
+	h := api.Handoff{Path: "/state/handoff/1a.md", UpdatedAt: 1000, Summary: handoff.Parse(
+		"## Status\nHalfway.\n## Waiting\n- on you: a go\n- the weather\n## Next\n- merge\n## Queue\n- [x] one\n- [ ] two\n")}
+	want := []string{
+		"handoff  /state/handoff/1a.md, written 2m ago",
+		"  status   Halfway.",
+		"  waits    on you: a go",
+		"  waits    on someone: the weather",
+		"  next     merge",
+		"  queue    1 open, 1 done, next: two",
+	}
+	if got := HandoffLines(h, time.Unix(1120, 0)); !reflect.DeepEqual(got, want) {
+		t.Errorf("HandoffLines =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestTeamCells(t *testing.T) {
+	m := api.Member{Task: api.Task{Task: store.Task{State: "needs", Ask: "Shall I?", Last: "Working."}}}
+	eq := func(got, want string) {
+		t.Helper()
+		if got != want {
+			t.Errorf("got %q, want %q", got, want)
+		}
+	}
+	eq(Where(m), "Shall I?")
+	m.State = "running"
+	eq(Where(m), "Working.")
+	m.Handoff.Status = "Halfway."
+	eq(Where(m), "Halfway.")
+	eq(QueueCell(handoff.Queue{}), "")
+	eq(QueueCell(handoff.Queue{Open: 2, Done: 3}), "2 open, 3 done")
+	eq(OnYouWhat(api.OnYou{Kind: "needs", What: "Shall I?"}), "asks: Shall I?")
+	eq(OnYouWhat(api.OnYou{Kind: "review", What: "PR #3"}), "in Review: PR #3")
+	eq(OnYouWhat(api.OnYou{Kind: "handoff", What: "a go"}), "a go")
 }

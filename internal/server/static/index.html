@@ -141,6 +141,12 @@ button, select, textarea, input { font: inherit; color: inherit; }
 .list tr.child td { color: var(--muted); }
 .list td.task { font-family: var(--sans); font-size: 13px; font-weight: 500; }
 .list .st { display: inline-flex; align-items: center; gap: 6px; }
+.team table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.team td { padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.team td.mono, .team td.q { white-space: nowrap; }
+.team tr[data-id] { cursor: pointer; }
+.team .st { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.team .wait { margin: 0 0 10px; padding-left: 18px; }
 
 .reply textarea { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; }
 
@@ -307,7 +313,7 @@ const STATES = [
 const ORDER = ["needs", "running", "review", "backlog", "parked", "done"];
 const POLL_MS = 2000;
 
-let tasks = [], detail = null, openId = null, dragId = null, view = "board";
+let tasks = [], detail = null, team = null, openId = null, dragId = null, view = "board";
 let boardSig = "", detailSig = "", loaded = false, confirmDelete = false, editingTitle = false;
 try { if (localStorage.getItem("view") === "list") view = "list"; } catch (err) {}
 let sortBy = "state";
@@ -585,6 +591,7 @@ function renderDrawer() {
       </div>
     </div>
     ${t.agents.length ? `<div><div class="label">Sub-agents and background jobs</div>${kidsHtml(t, "plain")}</div>` : ""}
+    ${teamHtml(team)}
     ${t.handoff && t.handoff.text ? `<div><div class="label">Handoff <span class="tok mono">${esc(t.handoff.path)}, written ${human(Math.max(0, Math.round(Date.now() / 1000 - t.handoff.updated_at)))} ago</span></div><div class="turn md handoff">${t.handoff.html}</div></div>` : ""}
     <div>
       <div class="label">Open in a terminal</div>
@@ -604,6 +611,21 @@ function renderDrawer() {
     : t.live ? "Your message goes straight to the session."
     : never ? "Sending a message starts the session with it."
     : "The session is closed. Sending a message resumes it in a new tmux window.";
+}
+
+// The tasks the open one drives, at any depth, and what waits on you among them.
+function teamHtml(tm) {
+  if (!tm || !tm.members.length) return "";
+  const top = topOf(tm.task);
+  const what = o => o.kind === "needs" ? "asks: " + o.what : o.kind === "review" ? "in Review: " + o.what : o.what;
+  const wait = tm.on_you.map(o => `<li><span class="mono">${o.short}</span> ${esc(o.title)}: ${esc(what(o))}</li>`).join("");
+  const rows = tm.members.map(m => {
+    const q = m.handoff.queue, where = m.handoff.status || (m.state === "needs" ? m.ask : m.last);
+    return `<tr class="s-${m.state}" data-id="${m.id}"><td class="mono">${branchHtml(m.tree, top)}${m.short}${drivesHtml(m.kids, top)}</td><td><span class="st"><span class="dot"></span>${esc(m.state_name)}</span></td>
+      <td class="q">${q.open + q.done ? `${q.open} open, ${q.done} done` : ""}</td><td>${esc(m.title)}</td><td>${esc(where)}</td></tr>`;
+  }).join("");
+  return `<div class="team"><div class="label">Team <span class="tok">the tasks it drives</span></div>
+    ${wait ? `<div class="label">Waits on you</div><ul class="wait">${wait}</ul>` : ""}<table><tbody>${rows}</tbody></table></div>`;
 }
 
 /* ---------- data ---------- */
@@ -627,13 +649,16 @@ async function refresh(force) {
     try {
       const t = await api("GET", "/api/tasks/" + openId);
       const sig = JSON.stringify([t.state, t.title, t.ask, t.live, t.persona, t.pane, t.attach, t.branch, t.agents, t.handoff && t.handoff.updated_at, t.tokens, t.context, t.cost, t.history.length, t.log.length, t.log.slice(-1), t.resume, t.screen, confirmDelete, t.timer_left < 60 ? t.timer_left : Math.floor(t.timer_left / 60)]);
-      detail = t;
-      if (sig !== detailSig || force) { detailSig = sig; renderDrawer(); }
+      // A task that drives others shows them too.
+      const tm = tasks.some(x => x.parent === t.id) ? await api("GET", `/api/tasks/${t.id}/team`) : null;
+      const teamSig = tm && JSON.stringify([tm.on_you, tm.members.map(m => [m.id, m.depth, m.state, m.title, m.handoff, m.state === "needs" ? m.ask : m.last])]);
+      detail = t; team = tm;
+      if (sig + teamSig !== detailSig || force) { detailSig = sig + teamSig; renderDrawer(); }
     } catch (err) { closeDrawer(); }
   }
 }
-function openDrawer(id) { openId = id; detail = null; detailSig = ""; confirmDelete = false; editingTitle = false; $("#overlay").innerHTML = ""; refresh(true); }
-function closeDrawer() { openId = null; detail = null; $("#overlay").innerHTML = ""; }
+function openDrawer(id) { openId = id; detail = null; team = null; detailSig = ""; confirmDelete = false; editingTitle = false; $("#overlay").innerHTML = ""; refresh(true); }
+function closeDrawer() { openId = null; detail = null; team = null; $("#overlay").innerHTML = ""; }
 
 /* ---------- events ---------- */
 

@@ -56,6 +56,7 @@ const (
 	viewSchedules             // the table of schedules
 	viewReview                // the review queue
 	viewColumns               // the list of the board's columns, to show, hide and move them
+	viewTeam                  // the coordinator view of one task
 )
 
 // --- messages ------------------------------------------------------------------------
@@ -147,6 +148,12 @@ type model struct {
 	schedCursor int
 	draft       scheduleDraft // the schedule being created
 
+	team        api.Team
+	teamID      string // the coordinator the view shows
+	teamCursor  int
+	teamLoading bool  // a poll of the view is on its way
+	teamWidths  []int // the widths of its columns, from every task
+
 	review        api.Review
 	reviewCursor  int
 	reviewLoading bool  // a poll of the queue is on its way
@@ -229,6 +236,8 @@ func (m model) Init() tea.Cmd {
 		cmds = append(cmds, m.loadSchedules())
 	case viewReview:
 		cmds = append(cmds, m.loadReview())
+	case viewTeam:
+		cmds = append(cmds, m.loadTeam())
 	}
 	return tea.Batch(cmds...)
 }
@@ -763,7 +772,7 @@ func (m *model) closeLine() {
 // one of those, so the flow needs no mark of its own.
 func (m model) idle() bool {
 	return m.asking == "" && m.sending == 0 && !m.selecting && (m.view == viewBoard || m.view == viewDetail || m.view == viewSchedules ||
-		m.view == viewReview || m.view == viewColumns)
+		m.view == viewReview || m.view == viewColumns || m.view == viewTeam)
 }
 
 // note shows a box over the current view. With confirm it is a y/n question: y runs confirm, n runs
@@ -816,6 +825,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reviewLoading = true
 			cmds = append(cmds, m.loadReview())
 		}
+		if m.view == viewTeam && !m.teamLoading {
+			m.teamLoading = true
+			cmds = append(cmds, m.loadTeam())
+		}
 		return m, tea.Batch(cmds...)
 
 	case reviewMsg:
@@ -831,6 +844,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.reviewWidths = columnWidths(reviewColumns, cells)
 		m.reviewCursor = max(0, min(m.reviewCursor, len(m.review.Items)-1))
+		return m, nil
+
+	case teamMsg:
+		m.teamLoading = false
+		if msg.id != m.teamID {
+			return m, nil // the view moved on to another coordinator meanwhile
+		}
+		if msg.err != nil {
+			m.say(msg.err.Error(), true)
+			return m, nil
+		}
+		m.team = msg.team
+		cells := make([][]cell, len(m.team.Members))
+		for i, mem := range m.team.Members {
+			cells[i] = teamCells(mem, m.teamColor())
+		}
+		m.teamWidths = columnWidths(teamColumns, cells)
+		m.teamCursor = max(0, min(m.teamCursor, len(m.team.Members)-1))
 		return m, nil
 
 	case diffDoneMsg:
@@ -1089,6 +1120,9 @@ func (m model) key(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case viewReview:
 		return m.reviewKey(key)
+
+	case viewTeam:
+		return m.teamKey(key)
 
 	case viewColumns:
 		return m.columnsKey(key)
@@ -1377,6 +1411,16 @@ func (m model) boardKey(key string) (tea.Model, tea.Cmd) {
 	case "R":
 		m.view, m.reviewLoading = viewReview, true
 		return m, m.loadReview()
+	case "w":
+		t := m.current()
+		if t == nil {
+			return m, nil
+		}
+		if id := m.teamOf(t); id != m.teamID {
+			m.teamID, m.team, m.teamCursor, m.teamWidths = id, api.Team{}, 0, nil
+		}
+		m.view, m.teamLoading = viewTeam, true
+		return m, m.loadTeam()
 	case "C":
 		m.view, m.colCursor = viewColumns, 0
 		return m, nil
@@ -1520,6 +1564,8 @@ func (m model) View() string {
 		return m.schedulesView()
 	case viewReview:
 		return m.reviewView()
+	case viewTeam:
+		return m.teamView()
 	case viewColumns:
 		return m.columnsView()
 	}

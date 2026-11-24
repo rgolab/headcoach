@@ -70,6 +70,8 @@ h               hide a done task, or show a hidden one again
 d               show or hide the hidden done tasks
 S               schedules: tasks that start themselves at a time of day, or on a cron line
 R               review queue: the tasks in Review, the one waiting longest first, with their change
+w               coordinator view: the tasks this one drives, or its parent drives, where each stands
+                and what waits on you among them
 C               columns: show, hide and reorder the columns of the board, kept after a restart
 ?               this help
 Q               quit (q or escape closes a view)`
@@ -92,7 +94,7 @@ var hintKeys = [][]hint{
 	{{"enter", "view"}, {"r", "reply"}, {"t", "title"}, {"m", "move"}, {"p", "park"}, {"a", "attach"}},
 	{{"A", "adopt"}, {"s", "start"}, {"n", "new"}, {"x", "delete"}, {"/", "filter"}, {"?", "help"}},
 	{{"S", "schedules"}, {"q", "ask"}, {"o", "order"}, {"d", "done"}, {":", "command"}, {"Q", "quit"}},
-	{{"c", "copy"}, {"R", "review"}, {"u", "update"}, {"v", "select"}, {"C", "columns"}},
+	{{"c", "copy"}, {"R", "review"}, {"u", "update"}, {"v", "select"}, {"C", "columns"}, {"w", "team"}},
 }
 
 // selectHintKeys are the keys shown in the header while the board is in select mode.

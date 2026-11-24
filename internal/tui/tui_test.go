@@ -86,6 +86,14 @@ func newDaemon(t *testing.T) *daemon {
 				{Task: push, Waited: 60, Tests: "passed", Delivery: "push", Change: &review.Change{
 					Branch: "main", Default: true, From: "aaaaaaa1", To: "bbbbbbb2", Commits: 2, Files: 3, Added: 10, Deleted: 1, Unpushed: 2}},
 			}, Metrics: api.ReviewMetrics{Days: 7, Reviews: 3, AvgWait: 600}})
+		case strings.HasSuffix(r.URL.Path, "/team"):
+			kid, grandkid := task("kid00001", "running", 60), task("gkid0001", "review", 5)
+			json.NewEncoder(w).Encode(api.Team{Task: task("boss0001", "done", 0), Handoff: handoff.Summary{Status: "Two tasks out."},
+				Members: []api.Member{
+					{Task: kid, Kids: 1, Handoff: handoff.Summary{Status: "Halfway.", Queue: handoff.Queue{Open: 2, Done: 1}}},
+					{Task: grandkid, Depth: 1, Tree: "└─ "},
+				},
+				OnYou: []api.OnYou{{Task: grandkid.ID, Short: "gkid0001", Title: "title gkid0001", Kind: "review", What: "PR #3"}}})
 		case r.URL.Path == "/api/tasks" && r.Method == "GET":
 			json.NewEncoder(w).Encode(api.Tasks{Tasks: []api.Task{task("fresh001", "running", 1)}})
 		case strings.HasPrefix(r.URL.Path, "/api/tasks/gone"):
@@ -1963,5 +1971,52 @@ func TestBoardNestsChildTasks(t *testing.T) {
 		if !strings.Contains(screen, piece) {
 			t.Errorf("the board lacks %q:\n%s", piece, screen)
 		}
+	}
+}
+
+// w opens the coordinator view of the task under the cursor, or of the task driving it.
+func TestTeamView(t *testing.T) {
+	d := newDaemon(t)
+	boss, kid, gkid := task("boss0001", "done", 0), task("kid00001", "running", 60), task("gkid0001", "review", 5)
+	kid.Parent, gkid.Parent = boss.ID, kid.ID
+	lone := task("lone0001", "running", 1)
+	m := loaded(t, d, boss, kid, gkid, lone)
+	for _, c := range []struct{ task, want string }{{"boss0001", "boss0001"}, {"kid00001", "kid00001"}, {"gkid0001", "kid00001"}, {"lone0001", "lone0001"}} {
+		for i := range m.tasks {
+			if m.tasks[i].ID == c.task {
+				if got := m.teamOf(&m.tasks[i]); got != c.want {
+					t.Errorf("teamOf(%s) = %s, want %s", c.task, got, c.want)
+				}
+			}
+		}
+	}
+	m.jump = "boss0001"
+	m.rebuild()
+	m, cmd := press(t, m, "w")
+	if m.view != viewTeam || m.teamID != "boss0001" || !m.teamLoading {
+		t.Fatalf("w opened view %d for %q", m.view, m.teamID)
+	}
+	m = run(t, m, cmd)
+	view := m.View()
+	for _, want := range []string{"team(boss0001 title boss0001)[2]", "Waits on you", "gkid0001  title gkid0001  in Review: PR #3", "2 open, 1 done",
+		"kid00001 ▾ 1", "└─ gkid0001", "title gkid0001", "Halfway.", "last gkid0001", "Two tasks out."} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the view lacks %q:\n%s", want, view)
+		}
+	}
+	// An answer for another coordinator, come late, is dropped.
+	if m2 := send(t, m, teamMsg{id: "lone0001"}); len(m2.team.Members) != 2 {
+		t.Error("a late answer replaced the view")
+	}
+	m, _ = press(t, m, "?")
+	if m.view != viewNote || !strings.Contains(m.View(), "Coordinator keys") {
+		t.Fatalf("no help:\n%s", m.View())
+	}
+	m, _ = press(t, m, "x", "j", "enter")
+	if m.view != viewBoard || m.current() == nil || m.current().ID != "gkid0001" {
+		t.Errorf("enter did not show the task on the board: view %d", m.view)
+	}
+	if m, _ = press(t, m, "w", "esc"); m.view != viewBoard {
+		t.Errorf("escape went to view %d", m.view)
 	}
 }

@@ -78,6 +78,7 @@ Then:
 | `A` | adopt a session from your own tmux |
 | `S` | schedules |
 | `R` | review queue: what waits on you in Review, `o` opens its pull request or its diff |
+| `w` | coordinator view: the tasks this one drives, or its parent drives, where each stands, and what waits on you; `enter` shows one on the board |
 | `C` | columns: `space` shows or hides one, `J` and `K` move it, `r` goes back to the default; the board keeps them after a restart |
 | `s` | start or resume |
 | `p` | park: close the session, keep it for later |
@@ -110,6 +111,7 @@ Then:
 - `hc new --parent <id> "<prompt>"`, `hc link <id> <parent>` and `hc unlink <id>` put a task under the one that drives it, see [Coordinators](#coordinators)
 - `hc inbox [<id>]` lists what a task heard from the tasks it drives
 - `hc handoff [init | path] [<id>]` prints a task's handoff file, `hc reset <id>` starts it again from there
+- `hc team [<id>]` shows the tasks a task drives, where each stands, and what waits on you among them
 - `hc move <id> <state>` moves a session, the state as the board shows it, `Running` or `Needs me`, and `Parked` closes it
 - `hc adopt <id>` moves a session from your tmux into the board's
 - `hc limits` shows each limit and when it resets
@@ -214,6 +216,9 @@ Then:
 - `<who>` is `you`, a task id, or anything else such as `ci`; HTML comments are guidance and never count
 - `hc show`, the detail and the web board sum it up: its status, what waits on whom, what is next, and the queue
 - `hc reset <task>` clears a task's context between two turns, then points the fresh one at its handoff; it refuses while the task works, and without a handoff that says something
+- `hc team [<task>]` is a coordinator's view: the tasks under it at any depth, their state, their queue, and where each stands, the calling task by default
+- it lists first what waits on you among them: a question, a change in `Review`, or a `- on you:` line of a handoff, the coordinator's own included
+- `w` on the board opens the same view for the task under the cursor, or for its parent when it drives none; the web board shows it in the detail of a task that drives others
 - `hc reply` from inside a session puts its sender before the message: `[from task 1a2b3c4d] stop`, so the other session never takes it for your words
 - `hc new` from inside a session does the same to the task's first prompt
 - a slash command keeps its place and the label goes before its arguments; a bare one such as `/compact` has none

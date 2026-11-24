@@ -170,6 +170,7 @@ func (s *Server) Handler() http.Handler {
 	locked("POST /api/tasks/{id}/start", s.startTask)
 	locked("POST /api/tasks/{id}/reply", s.reply)
 	locked("GET /api/tasks/{id}/inbox", s.inbox)
+	locked("GET /api/tasks/{id}/team", s.team)
 	locked("GET /api/tasks/{id}/handoff", s.getHandoff)
 	locked("POST /api/tasks/{id}/handoff", s.initHandoff)
 	// A reset waits for the cleared session to come back: it locks only while it reads or types.

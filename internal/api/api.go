@@ -153,6 +153,39 @@ type Inbox struct {
 	Items []InboxItem `json:"items"`
 }
 
+// Member is one task under a coordinator, as the coordinator view shows it.
+type Member struct {
+	Task
+	// Depth is how far under the coordinator it is: 0 for a task it drives itself. Tree draws the
+	// branches down to it from there, and Kids counts the tasks it drives in turn.
+	Depth int    `json:"depth"`
+	Tree  string `json:"tree"`
+	Kids  int    `json:"kids"`
+	// Handoff is what its handoff file says, HandoffAt when that changed: zero without a file.
+	Handoff   handoff.Summary `json:"handoff"`
+	HandoffAt float64         `json:"handoff_at"`
+}
+
+// OnYou is one thing that waits on you, in the coordinator view.
+type OnYou struct {
+	Task  string `json:"task"`
+	Short string `json:"short"`
+	Title string `json:"title"`
+	// Kind is needs for a task in Needs me, review for one in Review, handoff for a line of a handoff
+	// file that says it waits on you.
+	Kind string `json:"kind"`
+	What string `json:"what"`
+}
+
+// Team is the answer of GET /api/tasks/{id}/team: a coordinator, the tasks it drives at any depth,
+// and what waits on you among them.
+type Team struct {
+	Task    Task            `json:"task"`
+	Handoff handoff.Summary `json:"handoff"`
+	Members []Member        `json:"members"`
+	OnYou   []OnYou         `json:"on_you"`
+}
+
 // ReviewItem is one task of the review queue: what waits on you, and how big it is.
 type ReviewItem struct {
 	Task
