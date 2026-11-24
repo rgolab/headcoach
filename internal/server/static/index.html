@@ -224,6 +224,7 @@ a.tag:hover { background: var(--accent); color: var(--on-accent); }
 .turn.tool .who { display: none; }
 .turn.tool::before { content: "TOOL"; display: inline-block; font-family: var(--sans); font-size: 10px; font-weight: 600; letter-spacing: .08em; background: var(--done); color: var(--on-accent); border-radius: 3px; padding: 0 6px; margin-right: 8px; }
 .turn.ask .who { background: var(--need); }
+.turn.from .who { background: var(--need); }
 .turn.md { white-space: normal; font-size: 14px; line-height: 1.6; padding: 12px 14px; }
 .md > :first-child { margin-top: 0; }
 .md > :last-child { margin-bottom: 0; }
@@ -500,11 +501,13 @@ function renderDrawer() {
   }
   const trail = t.history.map(h => `<span><b>${stateName(h.state)}</b> ${clock(h.at)}</span>`).join("<span>&rarr;</span>");
   const names = { you: "You", agent: "Agent", tool: "Tool" };
+  // A message the board typed for another agent names its sender, never You.
+  const who = x => x.from ? `From ${esc(x.from)}` : names[x.who];
   // Your last prompt stays first in a log it is too old for: the gap says how much was left out.
   const gap = x => x.skipped ? `<div class="gap">… ${x.skipped} turn${x.skipped === 1 ? "" : "s"} …</div>` : "";
   let log = t.log.map(x => (x.html
-    ? `<div class="turn ${x.who} md"><div class="who">${names[x.who]}</div>${x.html}</div>`
-    : `<div class="turn ${x.who}"><div class="who">${names[x.who]}</div>${esc(x.text)}</div>`) + gap(x)).join("");
+    ? `<div class="turn ${x.who} md"><div class="who">${who(x)}</div>${x.html}</div>`
+    : `<div class="turn ${x.who}${x.from ? " from" : ""}"><div class="who">${who(x)}</div>${esc(x.text)}</div>`) + gap(x)).join("");
   if (t.state === "needs" && t.ask) log += `<div class="turn ask"><div class="who">Needs you</div>${esc(t.ask)}</div>`;
   if (!log) log = `<div class="empty">${t.session_id ? "Nothing in the session yet." : "No session yet. Start the task to open one."}</div>`;
   const never = !t.session_id;

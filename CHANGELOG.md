@@ -4,6 +4,10 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Added
+
+- a message `hc reply` sends from inside a session starts with its sender, such as `[from task 1a2b3c4d]`, so the other session never takes it for your words; `hc show`, the detail and the web board name the sender too
+
 ## [1.0.0] - 2026-11-23
 
 The first public release of headcoach. `hc` puts every Claude Code session on one board, in the terminal and in the browser, so you see what each agent does, what waits on you, and what it costs.

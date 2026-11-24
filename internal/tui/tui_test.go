@@ -96,7 +96,8 @@ func newDaemon(t *testing.T) *daemon {
 		default:
 			out := task("made0001", "backlog", 0)
 			out.Pane = "%7"
-			out.Detail = &api.Detail{Log: []transcript.Turn{{Who: "you", Text: "hello", Skipped: 3}, {Who: "tool", Text: "$ ls"}}}
+			out.Detail = &api.Detail{Log: []transcript.Turn{{Who: "you", Text: "hello", Skipped: 3}, {Who: "tool", Text: "$ ls"},
+				{Who: "you", Text: "[from coordinator 1a2b3c4d] stop", From: "coordinator 1a2b3c4d"}}}
 			json.NewEncoder(w).Encode(out)
 		}
 	}))
@@ -1337,7 +1338,8 @@ func TestDetailQuestionAndHelp(t *testing.T) {
 	m.detailID = "made0001" // the stand-in daemon answers with this task whatever is asked
 	m = run(t, m, m.loadDetail())
 	for _, piece := range []string{
-		"title made0001", "  state    Backlog", "Session log", "  you   | hello", "        | … 3 turns …", "  tool  | $ ls", "escape or q back",
+		"title made0001", "  state    Backlog", "Session log", "  you   | hello", "        | … 3 turns …", "  tool  | $ ls",
+		"  coord | [from coordinator 1a2b3c4d] stop", "escape or q back",
 	} {
 		if !strings.Contains(m.View(), piece) {
 			t.Errorf("the detail lacks %q:\n%s", piece, m.View())

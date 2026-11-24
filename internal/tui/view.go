@@ -804,8 +804,13 @@ func describe(t *api.Task) []cell {
 		add("  Nothing yet\n", dim)
 	}
 	for _, turn := range detail.Log {
-		add(fmt.Sprintf("  %-5s | ", turn.Who), whoStyles[turn.Who])
-		style := plain
+		who := format.Who(turn)
+		style := whoStyles[turn.Who]
+		if turn.From != "" {
+			style = whoStyles["from"]
+		}
+		add(fmt.Sprintf("  %-5s | ", who), style)
+		style = plain
 		if turn.Who == "tool" {
 			style = dim
 		}

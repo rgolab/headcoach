@@ -34,3 +34,31 @@ func TestNoAnswerIsNotNoDaemon(t *testing.T) {
 		t.Fatalf("no daemon: %v", err)
 	}
 }
+
+// A command an agent runs tells the daemon which session it runs in; one you type outside a session
+// sends nothing, and counts as yours.
+func TestCallerHeaders(t *testing.T) {
+	var got http.Header
+	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { got = r.Header }))
+	defer daemon.Close()
+	t.Setenv("CLAUDECODE", "")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "")
+	t.Setenv("HC_TASK", "")
+	if err := New(daemon.URL).Call("GET", "/api/tasks", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"X-HC-Session", "X-HC-Task", "X-HC-Agent"} {
+		if got.Get(name) != "" {
+			t.Errorf("outside a session, %s = %q", name, got.Get(name))
+		}
+	}
+	t.Setenv("CLAUDECODE", "1")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "s1")
+	t.Setenv("HC_TASK", "t1")
+	if err := New(daemon.URL).Call("POST", "/api/tasks/t2/reply", map[string]string{"text": "x"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got.Get("X-HC-Session") != "s1" || got.Get("X-HC-Task") != "t1" || got.Get("X-HC-Agent") != "1" {
+		t.Errorf("inside a session: %v", got)
+	}
+}

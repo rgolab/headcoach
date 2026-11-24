@@ -73,7 +73,8 @@ func newFixture(t *testing.T) *fixture {
 	t.Setenv("HC_DATA_DIR", filepath.Join(tmp, "data"))
 	t.Setenv("HC_CONFIG", filepath.Join(tmp, "config.toml"))
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "xdg"))
-	for _, name := range []string{"HC_URL", "HC_PORT", "HC_DB", "HC_TASK", "CLAUDE_CONFIG_DIR", "NO_COLOR"} {
+	for _, name := range []string{"HC_URL", "HC_PORT", "HC_DB", "HC_TASK", "CLAUDE_CONFIG_DIR", "NO_COLOR",
+		"CLAUDECODE", "CLAUDE_CODE_SESSION_ID"} {
 		t.Setenv(name, "")
 	}
 	st, err := store.Open(":memory:")
@@ -195,6 +196,28 @@ func TestLs(t *testing.T) {
 	}
 	if code, _, errOut := f.hc("ls", "--sort", "size"); code != 2 || !strings.Contains(errOut, "cannot sort by 'size'") {
 		t.Errorf("a bad sort gave %d %q", code, errOut)
+	}
+}
+
+// A reply an agent sends from its session reaches the other task with a label, and show names the sender.
+func TestReplyFromAnotherTask(t *testing.T) {
+	f := newFixture(t)
+	f.tmux.panes["%2"] = true
+	f.hook("UserPromptSubmit", "abcd1234-s1", "%1", map[string]any{"prompt": "fix it"})
+	f.hook("UserPromptSubmit", "c0ffee00-s2", "%2", map[string]any{"prompt": "coordinate"})
+	t.Setenv("CLAUDECODE", "1")
+	t.Setenv("CLAUDE_CODE_SESSION_ID", "c0ffee00-s2")
+	f.ok("reply", "abcd", "stop", "there")
+	if len(f.tmux.sent) != 1 || f.tmux.sent[0] != "%1|[from task c0ffee00] stop there" {
+		t.Errorf("sent %q", f.tmux.sent)
+	}
+	transcript := filepath.Join(f.tmp, "s1.jsonl")
+	os.WriteFile(transcript, []byte(`{"type": "user", "message": {"content": "fix it"}}
+{"type": "user", "message": {"content": "[from task c0ffee00] stop there"}}
+`), 0o644)
+	f.hook("Stop", "abcd1234-s1", "%1", map[string]any{"transcript_path": transcript, "last_assistant_message": "Stopped."})
+	if out := f.ok("show", "abcd"); !strings.Contains(out, "\nyou   | fix it\ntask  | [from task c0ffee00] stop there\n") {
+		t.Errorf("show does not name the sender:\n%s", out)
 	}
 }
 

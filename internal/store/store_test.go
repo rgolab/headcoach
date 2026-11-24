@@ -76,3 +76,36 @@ func TestOpenHidesTheTasksDoneBeforeTheHiddenColumn(t *testing.T) {
 		t.Error("a task shown again is hidden at the next open")
 	}
 }
+
+// A task keeps its newest messages only, and loses them all when it is deleted.
+func TestMessagesAreTrimmedAndDeleted(t *testing.T) {
+	st, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if _, err := st.CreateTask(Task{ID: "t1", Title: "t"}, "you"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < messagesKept+2; i++ {
+		if err := st.AddMessage(Message{TaskID: "t1", Sender: "task", SenderTask: "t2", Kind: "message", Text: "hi"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.AddMessage(Message{TaskID: "t3", Sender: "you", Kind: "message", Text: "other"}); err != nil {
+		t.Fatal(err)
+	}
+	kept, err := st.Messages("t1")
+	if err != nil || len(kept) != messagesKept || kept[0].ID != 3 || kept[0].SenderTask != "t2" || kept[0].At == 0 {
+		t.Fatalf("kept %d, first %+v, %v", len(kept), kept[0], err)
+	}
+	if err := st.DeleteTask("t1"); err != nil {
+		t.Fatal(err)
+	}
+	if kept, _ = st.Messages("t1"); len(kept) != 0 {
+		t.Errorf("a deleted task keeps %d messages", len(kept))
+	}
+	if other, _ := st.Messages("t3"); len(other) != 1 {
+		t.Errorf("another task lost its messages: %v", other)
+	}
+}

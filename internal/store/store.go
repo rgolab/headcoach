@@ -134,6 +134,16 @@ CREATE TABLE IF NOT EXISTS limit_samples (
     pct       REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS limit_samples_window ON limit_samples(profile, kind, resets_at);
+CREATE TABLE IF NOT EXISTS messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id     TEXT NOT NULL,
+    sender      TEXT NOT NULL DEFAULT 'you',
+    sender_task TEXT NOT NULL DEFAULT '',
+    kind        TEXT NOT NULL DEFAULT 'message',
+    text        TEXT NOT NULL DEFAULT '',
+    at          REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS messages_task ON messages(task_id);
 CREATE TABLE IF NOT EXISTS events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     at         REAL NOT NULL,
@@ -469,6 +479,7 @@ func (s *Store) DeleteTask(id string) error {
 	for _, stmt := range []string{
 		"DELETE FROM history WHERE task_id = ?",
 		"DELETE FROM agents WHERE task_id = ?",
+		"DELETE FROM messages WHERE task_id = ?",
 		"UPDATE sessions SET task_id = NULL WHERE task_id = ?",
 		"DELETE FROM tasks WHERE id = ?",
 	} {
@@ -537,6 +548,58 @@ func (s *Store) TaskSessions(taskID string) ([]Session, error) {
 func (s *Store) LatestSession(taskID string) (*Session, error) {
 	return scanSession(s.QueryRow(
 		"SELECT "+sessionColumns+" FROM sessions WHERE task_id = ? ORDER BY started_at DESC LIMIT 1", taskID))
+}
+
+// --- messages ------------------------------------------------------------------------
+
+// Message is one message the board typed into a task's session, and who sent it.
+type Message struct {
+	ID     int64  `json:"id"`
+	TaskID string `json:"task_id"`
+	Sender string `json:"sender"` // you, task, agent or hc
+	// SenderTask is the id of the task that sent it, when Sender is task.
+	SenderTask string `json:"sender_task"`
+	// Kind is message for a prompt, answer for the answer to a dialog, keys for keys pressed.
+	Kind string  `json:"kind"`
+	Text string  `json:"text"`
+	At   float64 `json:"at"`
+}
+
+// messagesKept is how many messages the board keeps per task.
+const messagesKept = 500
+
+// AddMessage records a message the board typed into a task's session, and trims the task's oldest.
+func (s *Store) AddMessage(m Message) error {
+	if m.At == 0 {
+		m.At = Now()
+	}
+	_, err := s.Exec("INSERT INTO messages (task_id, sender, sender_task, kind, text, at) VALUES (?, ?, ?, ?, ?, ?)",
+		m.TaskID, m.Sender, m.SenderTask, m.Kind, m.Text, m.At)
+	if err != nil {
+		return err
+	}
+	_, err = s.Exec("DELETE FROM messages WHERE task_id = ? AND id <= (SELECT id FROM messages WHERE task_id = ?"+
+		" ORDER BY id DESC LIMIT 1 OFFSET ?)", m.TaskID, m.TaskID, messagesKept)
+	return err
+}
+
+// Messages lists the messages typed into a task's session, oldest first.
+func (s *Store) Messages(taskID string) ([]Message, error) {
+	rows, err := s.Query("SELECT id, task_id, sender, sender_task, kind, text, at FROM messages WHERE task_id = ? ORDER BY id",
+		taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Message
+	for rows.Next() {
+		var m Message
+		if err := rows.Scan(&m.ID, &m.TaskID, &m.Sender, &m.SenderTask, &m.Kind, &m.Text, &m.At); err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
 }
 
 // --- events --------------------------------------------------------------------------

@@ -8,6 +8,7 @@ import (
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/humblebundledore/headcoach/internal/transcript"
 	"github.com/humblebundledore/headcoach/internal/usage"
 )
 
@@ -237,6 +238,26 @@ func TestTimed(t *testing.T) {
 	}{{"run", 0, "run"}, {"run", 420, "⏱ 7m run"}, {"↻ run", 45, "⏱ 45s ↻ run"}, {"run", -1, "run"}} {
 		if got := Timed(c.title, c.left); got != c.want {
 			t.Errorf("Timed(%q, %d) = %q, want %q", c.title, c.left, got, c.want)
+		}
+	}
+}
+
+func TestWho(t *testing.T) {
+	for _, c := range []struct {
+		turn transcript.Turn
+		want string
+	}{
+		{transcript.Turn{Who: "you"}, "you"},
+		{transcript.Turn{Who: "agent"}, "agent"},
+		{transcript.Turn{Who: "tool"}, "tool"},
+		{transcript.Turn{Who: "something new"}, "tool"},
+		{transcript.Turn{Who: "you", From: "coordinator 1a2b3c4d"}, "coord"},
+		{transcript.Turn{Who: "you", From: "task 1a2b3c4d"}, "task"},
+		{transcript.Turn{Who: "you", From: "an agent"}, "other"},
+		{transcript.Turn{Who: "you", From: "hc"}, "hc"},
+	} {
+		if got := Who(c.turn); got != c.want {
+			t.Errorf("Who(%+v) = %q, want %q", c.turn, got, c.want)
 		}
 	}
 }

@@ -99,7 +99,7 @@ Then:
 - `hc new -s "<prompt>"` starts a session in the current directory
 - `hc attach <id>` enters a session
 - `hc ask <id> ["<question>"]` answers a question about a session, or summarises it
-- `hc reply <id> "<text>"` sends a message to a session
+- `hc reply <id> "<text>"` sends a message to a session; from another session, it says who sent it, see [Coordinators](#coordinators)
 - on a question, `hc reply` types the answer in its "Type something" option and submits it; a dialog without one refuses it
 - a dialog of several questions takes one reply per question, then its own submit step: `hc keys <id> Enter`
 - `hc keys <id> <key>...` presses keys to answer a dialog, such as `Down Enter`
@@ -182,6 +182,18 @@ Then:
 - or merged, through a pull request the task opened or that holds its commits
 - the queue asks `gh` or `glab` about a pull request only while it is open, at most every 2 minutes
 - the last line: how long a task waited in Review on average, and the average cost of a task Done, over 7 days
+
+## Coordinators
+
+- a task can drive other tasks: it briefs them with `hc new`, relays decisions with `hc reply`, and reads them with `hc show`
+- `hc reply` from inside a session puts its sender before the message: `[from task 1a2b3c4d] stop`, so the other session never takes it for your words
+- `hc new` from inside a session does the same to the task's first prompt
+- a slash command keeps its place and the label goes before its arguments; a bare one such as `/compact` has none
+- your own messages, sent from a board or from a shell outside any session, carry no label
+- hc tells an agent from you by what Claude Code and the board put in a session's environment: `CLAUDE_CODE_SESSION_ID`, `CLAUDECODE` and `HC_TASK`
+- the last line on the board, `hc show`, the detail and the web board name the sender of each labeled message: `coord`, `task`, `other` or `hc`
+- `hc keys` cannot carry a label: the board records who pressed them
+- the label keeps honest agents apart, not hostile ones: anything on the machine can reach the daemon
 
 ## From your phone
 

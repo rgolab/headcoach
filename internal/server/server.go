@@ -979,8 +979,26 @@ func (s *Server) createTask(r *http.Request) (any, error) {
 	}
 	model, _ := launch["model"].(string)
 	effort, _ := launch["effort"].(string)
-	task, err := s.addTask(str(data, "title"), str(data, "prompt"), str(data, "cwd"), str(data, "profile"), model, effort,
+	from, err := s.caller(r)
+	if err != nil {
+		return nil, err
+	}
+	// The prompt of a task another agent adds is its first message: it carries a label, the title does not.
+	title, prompt := strings.TrimSpace(str(data, "title")), strings.TrimSpace(str(data, "prompt"))
+	label := from.label(nil)
+	if label != "" && prompt != "" {
+		if title == "" {
+			title = board.Clip(board.FirstLine(prompt), 90)
+		}
+		prompt = board.Labeled(label, prompt)
+	}
+	task, err := s.addTask(title, prompt, str(data, "cwd"), str(data, "profile"), model, effort,
 		str(data, "source"), "", "you", truthy(data["start"]), timer)
+	if task != nil && label != "" && prompt != "" {
+		if err := s.record(task, from, "message", prompt); err != nil {
+			return nil, err
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -1043,11 +1061,16 @@ func (s *Server) checkProfile(profile string) (string, error) {
 func (s *Server) getTask(r *http.Request) (any, error) {
 	s.mu.Lock()
 	out, paths, err := s.detail(r)
+	var sent []store.Message
+	if err == nil {
+		sent, err = s.st.Messages(out.ID)
+	}
 	s.mu.Unlock()
 	if err != nil {
 		return nil, err
 	}
 	out.Log = append(out.Log, s.Log(paths, logTurns)...)
+	senders(out.Log, sent)
 	for i := range out.Log {
 		if out.Log[i].Who == "agent" {
 			out.Log[i].HTML = transcript.Render(out.Log[i].Text)
@@ -1194,21 +1217,32 @@ func (s *Server) reply(r *http.Request) (any, error) {
 	if text == "" {
 		return nil, fail(400, "The message is empty")
 	}
+	from, err := s.caller(r)
+	if err != nil {
+		return nil, err
+	}
+	label := from.label(task)
 	sess, err := s.liveSession(task.ID)
 	if err != nil {
 		return nil, err
 	}
 	if sess == nil {
 		// No terminal left: resume the session with the message as its next prompt.
+		text = board.Labeled(label, text)
 		if _, err := s.openWindow(task, text); err != nil {
+			return nil, err
+		}
+		if err := s.record(task, from, "message", text); err != nil {
 			return nil, err
 		}
 		return s.refreshed(task.ID)
 	}
+	kind := "message"
 	if isDialog(task) {
 		if text = oneLine(text); text == "" {
 			return nil, fail(400, "The message is empty")
 		}
+		text, kind = board.Labeled(label, text), "answer"
 		// A permission prompt's own typed option rejects the tool: it is never picked for a reply.
 		answered := false
 		if task.AskKind != "permission" {
@@ -1220,10 +1254,16 @@ func (s *Server) reply(r *http.Request) (any, error) {
 		if err != nil {
 			return nil, fail(502, "tmux could not deliver the answer: %v", err)
 		}
-	} else if err := s.tmux.SendText(sess.Pane, text, sess.Socket); err != nil {
-		return nil, fail(502, "tmux could not deliver the message: %v", err)
+	} else {
+		text = board.Labeled(label, text)
+		if err := s.tmux.SendText(sess.Pane, text, sess.Socket); err != nil {
+			return nil, fail(502, "tmux could not deliver the message: %v", err)
+		}
 	}
-	if err := s.st.UpdateTask(task.ID, store.Fields{"last": board.Clip("You: "+board.FirstLine(text), 100)}); err != nil {
+	if err := s.record(task, from, kind, text); err != nil {
+		return nil, err
+	}
+	if err := s.st.UpdateTask(task.ID, store.Fields{"last": board.Said(text)}); err != nil {
 		return nil, err
 	}
 	return s.refreshed(task.ID)
@@ -1316,6 +1356,14 @@ func (s *Server) keys(r *http.Request) (any, error) {
 	}
 	if err := s.tmux.SendKeys(sess.Pane, pressed, sess.Socket); err != nil {
 		return nil, fail(400, "%v", err)
+	}
+	// Keys carry no label: the record is the only trace of who pressed them.
+	from, err := s.caller(r)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.record(task, from, "keys", strings.Join(pressed, " ")); err != nil {
+		return nil, err
 	}
 	time.Sleep(300 * time.Millisecond) // let the terminal redraw before reading it back
 	return map[string]string{"screen": s.screenText(sess)}, nil

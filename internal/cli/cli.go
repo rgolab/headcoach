@@ -116,7 +116,7 @@ func init() {
 		{name: "start", args: task, help: "start or resume a task in a new tmux window", min: 1, max: 1, run: cmdStart},
 		{name: "attach", args: task, help: "enter a task's session from this terminal; Ctrl-] comes back", min: 1, max: 1, run: cmdAttach},
 		{name: "ask", args: task + " [question]...", help: "ask about a task without touching its session; no question means a summary", min: 1, max: -1, run: cmdAsk},
-		{name: "reply", args: task + " <text>...", help: "send a message to a task's session, or the answer to its question", min: 2, max: -1, run: cmdReply},
+		{name: "reply", args: task + " <text>...", help: "send a message to a task's session, or the answer to its question; from a session, it names its sender", min: 2, max: -1, run: cmdReply},
 		{name: "timer", args: task + " <duration|off>", help: "close a task once this long has passed from now, e.g. 10m; off removes its timer", min: 2, max: 2, run: cmdTimer},
 		{name: "move", args: task + " <state>", help: "move a task to another state: " + stateNames(), min: 2, max: -1, run: cmdMove},
 		{name: "adopt", args: task, help: "move a session from your tmux into the board's own tmux", min: 1, max: 1, run: cmdAdopt},
@@ -450,11 +450,7 @@ func cmdShow(e *env, p parsed) error {
 	var log []string
 	if t.Detail != nil {
 		for _, turn := range transcript.Window(t.Log, turns) {
-			who := map[string]string{"you": "you  ", "agent": "agent"}[turn.Who]
-			if who == "" {
-				who = "tool "
-			}
-			log = append(log, who+" | "+strings.ReplaceAll(turn.Text, "\n", "\n      | "))
+			log = append(log, fmt.Sprintf("%-5s", format.Who(turn))+" | "+strings.ReplaceAll(turn.Text, "\n", "\n      | "))
 			if gap := turn.Gap(); gap != "" {
 				log = append(log, "      | "+gap)
 			}

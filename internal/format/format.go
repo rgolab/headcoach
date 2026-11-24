@@ -12,6 +12,7 @@ import (
 	"github.com/humblebundledore/headcoach/internal/limits"
 	"github.com/humblebundledore/headcoach/internal/review"
 	"github.com/humblebundledore/headcoach/internal/schedule"
+	"github.com/humblebundledore/headcoach/internal/transcript"
 	"github.com/humblebundledore/headcoach/internal/usage"
 )
 
@@ -122,6 +123,24 @@ func TreeRows(tasks []api.Task, by string) []Row {
 		}
 	}
 	return rows
+}
+
+// Who names the author of a log turn in five characters at most: you, agent, tool, or for a message
+// the board typed for another agent, the kind of sender its label names: coord, task, other or hc.
+func Who(t transcript.Turn) string {
+	if t.From != "" {
+		switch strings.Fields(t.From)[0] {
+		case "coordinator":
+			return "coord"
+		case "task", "hc":
+			return strings.Fields(t.From)[0]
+		}
+		return "other"
+	}
+	if t.Who == "you" || t.Who == "agent" {
+		return t.Who
+	}
+	return "tool"
 }
 
 // ContextLevel tells how full the context window is: empty, ok, warm or hot. The colours of the gauge

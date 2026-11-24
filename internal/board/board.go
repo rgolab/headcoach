@@ -385,7 +385,7 @@ func (b *Board) onUserPromptSubmit(p Payload, sess *store.Session) error {
 	if strings.HasPrefix(prompt, "/") {
 		persona = b.personaOf(prompt)
 	}
-	last := Clip("You: "+FirstLine(prompt), 100)
+	last := Said(prompt)
 	task, err := b.taskOf(sess)
 	if err != nil {
 		return err

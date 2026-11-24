@@ -110,6 +110,7 @@ func applyTheme(p palette) {
 		"you":   accent,
 		"agent": fg(p.done).Bold(true),
 		"tool":  dim,
+		"from":  fg(p.needs).Bold(true), // a message another agent sent: never to be read as yours
 	}
 	box = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color(p.accent)).Padding(0, 1)
 	selected = lipgloss.Color(p.selected)
