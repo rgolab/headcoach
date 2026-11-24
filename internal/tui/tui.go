@@ -39,6 +39,8 @@ const (
 	// glowStep is between two frames of a task lit up as it moves to Done.
 	glowStep = 250 * time.Millisecond
 	askWait  = 150 * time.Second
+	// deleteDelay is how long X leaves a task on the board before the daemon deletes it.
+	deleteDelay = 10 * time.Minute
 	// permission is why a reply cannot answer a permission prompt.
 	permission = "The session is asking for a permission. Answer it in the terminal."
 )
@@ -829,6 +831,24 @@ func (m *model) note(title, text string, confirm func() tea.Cmd) {
 	m.batchKey = ""
 }
 
+// welcome tells a new user how the board works, on the first board opened: until the file at path
+// exists. The file is written as the note shows, or in its place when show is off. When writing it
+// fails the note shows again next time, which beats never.
+func (m *model) welcome(path string, show bool) {
+	if path == "" {
+		return
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	if os.MkdirAll(filepath.Dir(path), 0o755) == nil {
+		os.WriteFile(path, nil, 0o644)
+	}
+	if show {
+		m.note("Welcome to headcoach", welcome, nil)
+	}
+}
+
 func (m *model) setDetail(cells []cell) {
 	// Wrapped to the width of the screen: a long line of the log must not run off it.
 	m.detail.SetContent(lipgloss.NewStyle().Width(max(20, m.width-2)).Render(renderLines(cells)))
@@ -1568,6 +1588,16 @@ func (m model) boardKey(key string) (tea.Model, tea.Cmd) {
 			c := m.client
 			return func() tea.Msg { return doneMsg{err: c.Call("DELETE", "/api/tasks/"+id, nil, nil)} }
 		})
+	case "X":
+		// No question: the task stays for a while, and X again keeps it.
+		if t.DeleteLeft > 0 {
+			return m, m.act("PATCH", path, map[string]int{"delete_in": 0},
+				func(t api.Task) string { return t.Short + " kept" })
+		}
+		return m, m.act("PATCH", path, map[string]int{"delete_in": int(deleteDelay.Seconds())},
+			func(t api.Task) string {
+				return t.Short + " deleted in " + format.Human(t.DeleteLeft) + ", X again keeps it"
+			})
 	case "a":
 		// A sub-agent has no terminal of its own: its row enters the main session, and says so.
 		return m, m.attach(*t, m.rows[m.cursor].Agent != nil)
@@ -1739,7 +1769,7 @@ func (m model) centered(content string) string {
 // workdir is where a bare folder name typed into "New task" lands, and profiles are the
 // configured profiles that "New task" offers.
 // The columns of the board are read from, and saved to, columnsPath.
-func Run(c *client.Client, theme, workdir string, profiles []string, columnsPath string) error {
+func Run(c *client.Client, theme, workdir string, profiles []string, columnsPath, welcomePath string) error {
 	if err := setTheme(theme); err != nil {
 		return err
 	}
@@ -1758,8 +1788,11 @@ func Run(c *client.Client, theme, workdir string, profiles []string, columnsPath
 	m.layout, m.layoutPath = readLayout(columnsPath), columnsPath
 	// A reload after an update hands over the view of the board it replaces. It is for this board
 	// only, not for the sessions it opens.
-	m.restoreState(os.Getenv(stateEnv))
+	saved := os.Getenv(stateEnv)
+	m.restoreState(saved)
 	os.Unsetenv(stateEnv)
+	// A board reloaded after an update was in use already: it is past its welcome.
+	m.welcome(welcomePath, saved == "")
 	program := tea.NewProgram(m, tea.WithAltScreen(), tea.WithoutSignalHandler())
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGTERM, syscall.SIGHUP)

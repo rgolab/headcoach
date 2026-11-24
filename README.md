@@ -62,15 +62,15 @@ Then:
 
 - `hc hooks install` connects Claude Code to the board
 - `hc service install` starts the daemon now and at every login
-- `hc` opens the board
+- `hc` opens the board; the first one shows how it works, once
 
 ## Keys
 
 | Key | Action |
 |---|---|
 | `j` `k`, arrows | move the cursor; `g` `G` go to the top or the bottom, `pgup` `pgdn` move a page |
-| `enter` | open the session: details, history, log |
 | `a` | enter the session, `Ctrl-]` comes back; on a sub-agent, its main session |
+| `enter` | open the session: details, history, log |
 | `q` | ask about the session without touching it |
 | `r` | reply to the session; on a question, the answer goes in its "Type something" option |
 | `n` | new session: its folder, its profile, then its title; `tab` lists the folders |
@@ -92,6 +92,7 @@ Then:
 | `h` | hide a Done task, or show a hidden one again; a Done task stays on the board, dimmed, until you hide it |
 | `d` | show or hide the hidden Done tasks |
 | `x` | delete from the board |
+| `X` | delete from the board in 10 minutes, without a question; `X` again keeps it |
 | `v` | select: `space` ticks tasks, then `x`, `m`, `p` or `h` deletes, moves, parks or hides all of them after one y / n, `esc` leaves |
 | `?` | help |
 | `Q` | quit |
@@ -157,6 +158,8 @@ Then:
 - the ⏱ column of the board and of `hc ls` shows the time left, `-` without a timer, the review queue ⏱ before the title, and the web board a tag
 - once it runs out, within half a minute, the task moves to Done and its session ends, whatever it was doing
 - a task you moved to Done yourself only loses its timer: a session you kept open there stays
+- `X` on the board deletes a task in 10 minutes, as `x` does but without a question: the ⏱ column shows `✗` and the time left, unless the timer runs out first
+- `X` again keeps the task, and so does a task that runs again: a reply or a start brings it back to Running
 - a schedule gives each of its runs a timer: `hc schedule add --timer 10m ...`, or `hc schedule timer <schedule> 10m` on one already there
 - the daemon runs timers, so it must be running
 
@@ -274,6 +277,7 @@ Then:
 - `theme` picks the board's colors: `terminal` (follows your terminal), `bright`, `nord` or `k9s`
 - `hc tui --theme k9s` tries a theme without touching the config
 - `C` on the board saves its columns to `columns` next to the board's database, one name per line, a hidden one after a `-`
+- `welcomed` next to the board's database says the board showed its welcome; delete it to see the welcome again
 - `test_pattern` names the commands that run tests, for the review queue, by default `make check`, `go test`, `npm test`, `pytest` and the like; `""` turns it off
 - `persona_pattern` names the skills that count as a persona, by default `(^|[-_])(developer|reviewer|architect|researcher|planner|tester)($|[-_])`
 - `workdir = "~/code"` makes `hc new -C myidea` mean `~/code/myidea`

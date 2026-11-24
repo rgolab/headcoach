@@ -428,8 +428,12 @@ func Timed(title string, left int) string {
 	return "⏱ " + Human(left) + " " + title
 }
 
-// TimerCell is the time left on a task's timer, or nothing when it has none.
-func TimerCell(left int) string {
+// TimerCell is the time left on a task's timer, or before it is deleted after a ✗, whichever comes
+// first. Nothing when it has neither.
+func TimerCell(left, deleteLeft int) string {
+	if deleteLeft > 0 && (left <= 0 || deleteLeft <= left) {
+		return "✗ " + Human(deleteLeft)
+	}
 	if left <= 0 {
 		return ""
 	}

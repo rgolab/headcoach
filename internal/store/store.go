@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     hidden     INTEGER NOT NULL DEFAULT 0,
     parent     TEXT NOT NULL DEFAULT '',
     pinned_at  REAL NOT NULL DEFAULT 0,
+    delete_at  REAL NOT NULL DEFAULT 0,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -211,7 +212,9 @@ type Task struct {
 	// Parent is the id of the task that drives this one, its coordinator. Empty: none.
 	Parent string `json:"parent"`
 	// PinnedAt is when you pinned the task to the top of the board, as a Unix time. Zero: not pinned.
-	PinnedAt  float64 `json:"pinned_at"`
+	PinnedAt float64 `json:"pinned_at"`
+	// DeleteAt is when the daemon deletes the task, as a Unix time. Zero: it stays.
+	DeleteAt  float64 `json:"delete_at"`
 	CreatedAt float64 `json:"created_at"`
 	UpdatedAt float64 `json:"updated_at"`
 }
@@ -278,6 +281,7 @@ func Open(path string) (*Store, error) {
 		{"tasks", "schedule", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "parent", "TEXT NOT NULL DEFAULT ''"},
 		{"tasks", "pinned_at", "REAL NOT NULL DEFAULT 0"},
+		{"tasks", "delete_at", "REAL NOT NULL DEFAULT 0"},
 		{"schedules", "timer", "INTEGER NOT NULL DEFAULT 0"},
 		{"schedules", "model", "TEXT NOT NULL DEFAULT ''"},
 		{"schedules", "effort", "TEXT NOT NULL DEFAULT ''"},
@@ -344,14 +348,14 @@ func (s *Store) addColumn(table, column, decl string) error {
 // --- tasks ---------------------------------------------------------------------------
 
 const taskColumns = "id, title, prompt, state, cwd, repo, branch, profile, source, ask, ask_kind, last, remote," +
-	" persona, waiting, base, ends_at, model, effort, schedule, hidden, parent, pinned_at, created_at, updated_at"
+	" persona, waiting, base, ends_at, model, effort, schedule, hidden, parent, pinned_at, delete_at, created_at, updated_at"
 
 type scanner interface{ Scan(dest ...any) error }
 
 func scanTask(row scanner) (*Task, error) {
 	var t Task
 	err := row.Scan(&t.ID, &t.Title, &t.Prompt, &t.State, &t.Cwd, &t.Repo, &t.Branch, &t.Profile, &t.Source,
-		&t.Ask, &t.AskKind, &t.Last, &t.Remote, &t.Persona, &t.Waiting, &t.Base, &t.EndsAt, &t.Model, &t.Effort, &t.Schedule, &t.Hidden, &t.Parent, &t.PinnedAt,
+		&t.Ask, &t.AskKind, &t.Last, &t.Remote, &t.Persona, &t.Waiting, &t.Base, &t.EndsAt, &t.Model, &t.Effort, &t.Schedule, &t.Hidden, &t.Parent, &t.PinnedAt, &t.DeleteAt,
 		&t.CreatedAt, &t.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -414,9 +418,9 @@ func (s *Store) CreateTask(t Task, by string) (*Task, error) {
 		t.Source = "manual"
 	}
 	_, err := s.Exec(
-		"INSERT INTO tasks ("+taskColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO tasks ("+taskColumns+") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		t.ID, t.Title, t.Prompt, t.State, t.Cwd, t.Repo, t.Branch, t.Profile, t.Source, t.Ask, t.AskKind, t.Last,
-		t.Remote, t.Persona, t.Waiting, t.Base, t.EndsAt, t.Model, t.Effort, t.Schedule, false, t.Parent, 0, now, now,
+		t.Remote, t.Persona, t.Waiting, t.Base, t.EndsAt, t.Model, t.Effort, t.Schedule, false, t.Parent, 0, 0, now, now,
 	)
 	if err != nil {
 		return nil, err
@@ -431,7 +435,7 @@ func (s *Store) CreateTask(t Task, by string) (*Task, error) {
 var taskFields = map[string]bool{
 	"title": true, "prompt": true, "state": true, "cwd": true, "repo": true, "branch": true, "profile": true,
 	"source": true, "ask": true, "ask_kind": true, "last": true, "remote": true, "persona": true,
-	"waiting": true, "base": true, "ends_at": true, "hidden": true, "parent": true,
+	"waiting": true, "base": true, "ends_at": true, "hidden": true, "parent": true, "delete_at": true,
 }
 
 // UpdateTask changes some columns of a task and its updated_at. Without fields it only touches updated_at.
@@ -471,6 +475,10 @@ func (s *Store) SetState(id, state, by string, fields Fields) (bool, error) {
 	set := Fields{"state": state, "waiting": false}
 	if task.State != state {
 		set["hidden"] = false
+	}
+	// A task that runs again is wanted again: a delete set while it was away no longer holds.
+	if state == "running" && task.State != state {
+		set["delete_at"] = 0
 	}
 	if state != "needs" {
 		set["ask"], set["ask_kind"] = "", ""
@@ -515,6 +523,13 @@ func (s *Store) PinTask(id string, pinned bool) error {
 		return err
 	}
 	_, err := s.Exec("UPDATE tasks SET pinned_at = ? WHERE id = ? AND pinned_at = 0", Now(), id)
+	return err
+}
+
+// DeleteTaskAt sets when the daemon deletes a task, as a Unix time, zero to keep it. It leaves
+// updated_at alone: a delete to come is not activity of the task.
+func (s *Store) DeleteTaskAt(id string, at float64) error {
+	_, err := s.Exec("UPDATE tasks SET delete_at = ? WHERE id = ?", at, id)
 	return err
 }
 

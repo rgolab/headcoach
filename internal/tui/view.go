@@ -45,14 +45,14 @@ const (
 	headerHeight = 6 // lines of the k9s-style block above the table
 	help         = `j / k, arrows   move the cursor
 g / G           go to the top or the bottom; pgup / pgdn move a page
+a               attach: enter the session in this terminal, Ctrl-] comes back; a sub-agent enters
+                its main session
 enter           open the task: metadata, history, session log
 r               reply to the session; on a question, answer it in its "Type something" option
 q               question: ask about the session without touching it; enter alone gives a summary
 t               title: rename the task
 m               move the task to another state
 p               park the task: close its tmux pane, keep the session for later
-a               attach: enter the session in this terminal, Ctrl-] comes back; a sub-agent enters
-                its main session
 A               adopt: swallow a session from your own tmux into the board's tmux
 s               start or resume the session in a new tmux window
 n               new task: its folder (tab lists the folders, a missing one is created), the profile when
@@ -60,6 +60,7 @@ n               new task: its folder (tab lists the folders, a missing one is cr
                 session, where you type the prompt yourself
 c               copy: a new task in the folder and with the profile of this one; you give its title
 x               delete the task (the Claude session is kept)
+X               delete the task in 10 minutes, without a question; X again keeps it
 v               select: space ticks the task under the cursor, then x deletes, m moves, p parks or h hides
                 every ticked task after one y / n, escape leaves
 /               fuzzy filter by title, repo or task id, the cursor on the best fit: "hcfz" finds
@@ -80,6 +81,19 @@ C               columns: show, hide and reorder the columns of the board, kept a
 Q               quit (q or escape closes a view)`
 )
 
+// welcome is the note the first board shows, to a user who has not met it yet.
+const welcome = `Every Claude Code session shows up here as a task, the moment you send its first prompt.
+A task that waits on you moves to Needs me or Review.
+
+a        enter the session under the cursor, and work in it as in any terminal
+Ctrl-]   leave the session and come back here: it keeps running
+enter    open the task: what it did, its history, its log
+q        ask about the session without interrupting it
+n        start a new session: its folder, its profile, then its title
+?        every key
+
+This note shows once. Any key closes it.`
+
 var logo = []string{
 	"  _          ",
 	" | |__   ___ ",
@@ -94,7 +108,7 @@ type hint struct{ key, does string }
 
 // hintKeys are the keys shown in the header, k9s style, in columns. The full list is behind ?.
 var hintKeys = [][]hint{
-	{{"enter", "view"}, {"r", "reply"}, {"t", "title"}, {"m", "move"}, {"p", "park"}, {"a", "attach"}},
+	{{"a", "attach"}, {"enter", "view"}, {"r", "reply"}, {"t", "title"}, {"m", "move"}, {"p", "park"}},
 	{{"A", "adopt"}, {"s", "start"}, {"n", "new"}, {"x", "delete"}, {"/", "filter"}, {"?", "help"}},
 	{{"S", "schedules"}, {"q", "ask"}, {"o", "order"}, {"d", "done"}, {":", "command"}, {"Q", "quit"}},
 	{{"c", "copy"}, {"R", "review"}, {"u", "update"}, {"v", "select"}, {"C", "columns"}, {"w", "team"}},
@@ -291,8 +305,11 @@ func rowCells(row format.Row) []cell {
 	if effort == "" {
 		effort, effortStyle = "-", dim
 	}
-	timer, timerStyle := format.TimerCell(t.TimerLeft), plain
-	if timer == "" {
+	timer, timerStyle := format.TimerCell(t.TimerLeft, t.DeleteLeft), plain
+	switch {
+	case strings.HasPrefix(timer, "✗"):
+		timerStyle = alarm
+	case timer == "":
 		timer, timerStyle = "-", dim
 	}
 	schedule, scheduleStyle := format.ScheduleCell(t.Schedule), plain

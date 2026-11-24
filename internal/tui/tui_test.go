@@ -1962,6 +1962,98 @@ func TestATimedTaskShowsItsTimeLeft(t *testing.T) {
 	}
 }
 
+func TestXDeletesInTenMinutesWithoutAQuestion(t *testing.T) {
+	d := newDaemon(t)
+	doomed := task("doom0001", "done", 1)
+	doomed.DeleteLeft, doomed.TimerLeft = 420, 60
+	m := loaded(t, d, task("run00001", "running", 5), doomed)
+
+	m, cmd := press(t, m, "X")
+	if m.view != viewBoard {
+		t.Fatalf("X asked a question:\n%s", m.View())
+	}
+	m = run(t, m, cmd)
+	if m.notice != "made0001 deleted in 0s, X again keeps it" {
+		t.Errorf("after X: %q", m.notice)
+	}
+	// On a task already on its way out, X keeps it.
+	m, _ = press(t, m, "d")
+	m.cursor = slices.Index(m.keys, "doom0001")
+	m, cmd = press(t, m, "X")
+	m = run(t, m, cmd)
+	if m.notice != "made0001 kept" {
+		t.Errorf("X again: %q", m.notice)
+	}
+	want := []string{`PATCH /api/tasks/run00001 {"delete_in":600}`, `PATCH /api/tasks/doom0001 {"delete_in":0}`}
+	if !reflect.DeepEqual(d.calls, want) {
+		t.Errorf("the daemon got %q", d.calls)
+	}
+
+	// The row shows the delete to come in the timer column as an alarm, unless its timer runs out first.
+	running := task("run00002", "running", 1)
+	running.DeleteLeft, running.TimerLeft = 420, 900
+	timed := running
+	timed.TimerLeft = 60
+	for _, c := range []struct {
+		task  api.Task
+		want  string
+		style lipgloss.Style
+	}{{running, "✗ 7m", alarm}, {timed, "1m", plain}} {
+		cells := rowCells(format.Row{Task: &c.task})
+		for i, col := range columns {
+			if col.name == "TIMER" && (cells[i].text != c.want || !reflect.DeepEqual(cells[i].style, c.style)) {
+				t.Errorf("a task about to be deleted has the timer cell %q, want %q", cells[i].text, c.want)
+			}
+		}
+	}
+}
+
+func TestAttachIsTheFirstKey(t *testing.T) {
+	m := loaded(t, nil, task("run00001", "running", 1))
+	if first := m.header()[0]; !regexp.MustCompile(`<a> +attach +<A> +adopt`).MatchString(first) {
+		t.Errorf("the hints do not open on attach: %q", first)
+	}
+	if a, enter := strings.Index(help, "\na "), strings.Index(help, "\nenter "); a < 0 || a > enter {
+		t.Errorf("the help lists attach after enter:\n%s", help)
+	}
+}
+
+func TestTheFirstBoardWelcomesOnce(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state", "welcomed")
+	m := loaded(t, nil, task("run00001", "running", 1))
+	m.welcome(path, true)
+	if m.view != viewNote || !strings.Contains(m.View(), "Welcome to headcoach") || !strings.Contains(m.View(), "Ctrl-]") {
+		t.Fatalf("the first board did not welcome:\n%s", m.View())
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("the welcome left no trace: %v", err)
+	}
+	// Any key closes it, and is not taken as a key of the board.
+	m, cmd := press(t, m, "a")
+	if m.view != viewBoard || cmd != nil {
+		t.Errorf("a key did not just close the welcome: view %d", m.view)
+	}
+
+	// The next board goes straight to work.
+	m = loaded(t, nil, task("run00001", "running", 1))
+	m.welcome(path, true)
+	if m.view != viewBoard {
+		t.Errorf("the welcome showed twice:\n%s", m.View())
+	}
+	m.welcome("", true)
+	if m.view != viewBoard {
+		t.Error("a board without a state folder welcomed")
+	}
+
+	// A board reloaded after an update says nothing, and is past its welcome from then on.
+	other := filepath.Join(dir, "welcomed")
+	m.welcome(other, false)
+	if _, err := os.Stat(other); m.view != viewBoard || err != nil {
+		t.Errorf("a reloaded board: view %d, marker %v", m.view, err)
+	}
+}
+
 func TestTheModelColumn(t *testing.T) {
 	chosen := task("cho00001", "running", 1)
 	chosen.Model, chosen.SessionModel = "claude-sonnet-4-5", "claude-opus-4-5"
