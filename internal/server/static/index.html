@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>headcoach</title>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -61,11 +61,11 @@ button, select, textarea, input { font: inherit; color: inherit; }
 @media (max-width: 1000px) { .board { grid-template-columns: minmax(0, 1fr); } }
 /* Pairing: what a phone sees until hc pair lets it in. */
 .pair { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 16px; background: var(--bg); }
-.pair form { width: min(100%, 360px); display: grid; gap: 12px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.pair form { width: min(100%, 360px); display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
 .pair img { width: 72px; height: 72px; justify-self: center; }
 .pair h1 { margin: 0; font-size: 20px; text-align: center; }
 .pair p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
-.pair input { font: 500 24px var(--mono); letter-spacing: .12em; text-align: center; text-transform: uppercase; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); }
+.pair input { width: 100%; min-width: 0; font: 500 24px var(--mono); letter-spacing: .12em; text-align: center; text-transform: uppercase; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); }
 .pair button { font: 600 16px var(--sans); padding: 12px; border: 0; border-radius: 8px; background: var(--accent); color: var(--on-accent); }
 .pair .err { color: var(--hot); min-height: 1.5em; }
 .col { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
@@ -262,6 +262,54 @@ a.tag:hover { background: var(--accent); color: var(--on-accent); }
 .md th, .md td { border: 1px solid var(--line); padding: 5px 9px; text-align: left; vertical-align: top; }
 .md th { background: var(--panel); font-weight: 600; color: var(--accent); }
 .d-head input { flex: 1; min-width: 0; font-size: 16px; font-weight: 600; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+/* The keys under the terminal are repeated above the reply box, for a phone only. */
+.reply .keys { display: none; }
+
+/* Phone: one list grouped by state, the most urgent first, and a full-screen drawer sized to what the
+   keyboard leaves visible. iOS zooms in on a field under 16px, and a finger needs 44px. */
+@media (max-width: 640px) {
+  body { padding: 12px 12px 24px; }
+  body:has(.drawer) { overflow: hidden; }
+  input, select, textarea, .d-head input, .panel textarea, .panel input, .panel select { font-size: 16px; }
+  .btn, .btn.small, select, .sort select, .moverow select { min-height: 44px; min-width: 44px; }
+  .top { gap: 10px 14px; }
+  .top .seg { display: none; }
+  .top .grow { flex-basis: 100%; order: 1; height: 0; }
+  .top .attn, #usage, #limits { order: 2; }
+  .top .sort, #newbtn { order: 3; }
+  #newbtn { margin-left: auto; }
+  .tag { line-height: 22px; }
+  a.tag { display: inline-flex; align-items: center; min-height: 44px; padding: 0 10px; }
+
+  .board { display: flex; flex-direction: column; gap: 16px; }
+  .col { background: none; border: 0; }
+  .col:has(> .cards > .empty) { display: none; }
+  .col.s-needs { order: 1; } .col.s-running { order: 2; } .col.s-review { order: 3; }
+  .col.s-backlog { order: 4; } .col.s-parked { order: 5; } .col.s-done { order: 6; }
+  .col-head { padding: 0 2px 6px; }
+  .cards { padding: 0; min-height: 0; }
+  .card { padding: 12px; }
+
+  .drawer {
+    top: var(--vv-top, 0px); left: 0; right: 0; bottom: auto; height: var(--vv-height, 100dvh); width: auto; transform: none;
+    border: 0; border-radius: 0; box-shadow: none;
+  }
+  .d-head { padding: 8px 12px; align-items: center; }
+  .d-body { padding: 12px; overscroll-behavior: contain; }
+  .d-body > * { min-width: 0; }
+  .d-body .keys { display: none; }
+  .moverow { flex-wrap: wrap; }
+  .team { overflow-x: auto; }
+  .turn.you { margin-left: 8%; }
+  .turn.agent { margin-right: 0; }
+  .turn.tool { margin-right: 0; margin-left: 12px; }
+  .reply { padding: 8px 12px; gap: 6px; }
+  .reply textarea { min-height: 44px; height: 44px; resize: none; }
+  .reply .keys { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin: 0; }
+  .reply .keys .btn { min-width: 0; }
+  .reply .row { flex-wrap: nowrap; }
+  .reply .hint { font-size: 11px; line-height: 1.3; }
+}
 </style>
 </head>
 <body>
@@ -523,8 +571,9 @@ function renderBoard() {
       You can also add one with New task, or from a shell with <code>hc new "fix the flaky test"</code>.</div>`;
     return;
   }
-  el.className = view === "list" ? "list" : "board";
-  if (view === "list") { el.innerHTML = listHtml(); return; }
+  const list = view === "list" && !narrow.matches;
+  el.className = list ? "list" : "board";
+  if (list) { el.innerHTML = listHtml(); return; }
   el.innerHTML = STATES.map(s => {
     const list = (sortBy === "state" ? pinFirst(tasks) : sorted(tasks)).filter(t => t.state === s.id);
     return `<section class="col s-${s.id}" data-state="${s.id}">
@@ -542,11 +591,15 @@ function drawerShell() {
     <div class="d-head" id="d-head"></div>
     <div class="d-body" id="d-body"></div>
     <form class="reply" id="reply">
+      <div class="keys" id="footkeys"></div>
       <textarea id="msg" placeholder="Message the agent" aria-label="Message the agent"></textarea>
       <div class="row"><span class="hint" id="hint"></span><button class="btn primary" type="submit" id="send">Send</button></div>
     </form>
   </aside>`;
 }
+
+const keysHtml = [["Up", "\u2191"], ["Down", "\u2193"], ["Enter", "Enter"], ["Escape", "Esc"], ["Tab", "Tab"], ["1", "1"], ["2", "2"], ["3", "3"], ["y", "y"], ["n", "n"]]
+  .map(([k, label]) => `<button class="btn small" type="button" data-key="${k}">${label}</button>`).join("");
 
 function renderDrawer() {
   const t = detail;
@@ -603,11 +656,11 @@ function renderDrawer() {
     </div>
     <div><div class="label">Session</div><div class="log">${log}</div></div>
     ${t.screen ? `<div><div class="label">Terminal, waiting for an answer</div><pre class="screen" id="screen">${esc(t.screen)}</pre>
-      <div class="keys">${[["Up", "\u2191"], ["Down", "\u2193"], ["Enter", "Enter"], ["Escape", "Esc"], ["Tab", "Tab"], ["1", "1"], ["2", "2"], ["3", "3"], ["y", "y"], ["n", "n"]]
-        .map(([k, label]) => `<button class="btn small" type="button" data-key="${k}">${label}</button>`).join("")}
-        <span class="sep">Each button presses that key in the session.</span></div></div>` : ""}`;
+      <div class="keys">${keysHtml}<span class="sep">Each button presses that key in the session.</span></div></div>` : ""}`;
   body.querySelectorAll(".md a").forEach(a => { a.target = "_blank"; a.rel = "noopener"; });
   if (atBottom) body.scrollTop = body.scrollHeight;
+  $("#footkeys").innerHTML = t.screen ? keysHtml : "";
+  fitDrawer();
   $("#msg").disabled = $("#send").disabled = t.ask_kind === "permission" && !t.can_reply;
   $("#hint").textContent = t.ask_kind === "permission" && !t.can_reply ? "The session is asking for a permission. Answer it with the keys above."
     : !t.can_reply ? "The session is showing a dialog. Answer it with the keys above, or type an answer: it goes in the free text option, if the dialog has one."
@@ -616,6 +669,16 @@ function renderDrawer() {
     : never ? "Sending a message starts the session with it."
     : "The session is closed. Sending a message resumes it in a new tmux window.";
 }
+
+// On a phone the drawer covers what the keyboard leaves visible: iOS keeps fixed boxes at full height.
+const narrow = matchMedia("(max-width: 640px)");
+function fitDrawer() {
+  const d = $(".drawer"), vv = window.visualViewport;
+  if (!d) return;
+  d.style.setProperty("--vv-top", vv ? vv.offsetTop + "px" : "0px");
+  d.style.setProperty("--vv-height", vv ? vv.height + "px" : "100dvh");
+}
+if (window.visualViewport) for (const ev of ["resize", "scroll"]) visualViewport.addEventListener(ev, fitDrawer);
 
 // The tasks the open one drives, at any depth, and what waits on you among them.
 function teamHtml(tm) {
@@ -774,6 +837,7 @@ async function boot() {
   setInterval(() => { if (!document.hidden) refresh(false); }, POLL_MS);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(false); });
 }
+narrow.addEventListener("change", () => renderBoard());
 boot();
 </script>
 </body>

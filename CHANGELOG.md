@@ -4,6 +4,10 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Changed
+
+- the web board fits a phone: one list grouped by state with `Needs me` first, a full-screen task panel whose reply box and keys stay above the keyboard, and 44px buttons
+
 ## [1.1.1] - 2026-11-25
 
 headcoach has a new home on GitHub. Nothing changes on your board.
