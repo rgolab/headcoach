@@ -244,6 +244,7 @@ Then:
 - `hc pair phone` prints a code; open the board's tailnet address on the phone and type it within 10 minutes
 - a code works once, and five wrong codes cancel it
 - the phone keeps a token in a cookie; the daemon keeps only its hash
+- on a phone the board is one list grouped by state, `Needs me` first, and a task opens full screen with the reply box and the keys for its question above the keyboard
 - `hc devices` lists the paired devices, `hc devices rm phone` unpairs one
 - hooks and pairing stay on the computer: a paired device cannot pair another
 - a paired app can enter a session in the board's tmux, the way `a` does on the terminal board: `GET /api/tasks/<id>/attach` runs `tmux attach` on the computer and streams it over a WebSocket
