@@ -962,13 +962,21 @@ func (s *Server) hook(r *http.Request) (any, error) {
 	if pane, socket := r.Header.Get("X-Herdr-Pane"), r.Header.Get("X-Herdr-Socket"); pane != "" && socket != "" {
 		origin.HerdrPane, origin.HerdrSocket = pane, config.RealPath(socket)
 	}
-	hadTask := false
-	if sid, ok := payload["session_id"].(string); ok {
+	named := "" // the window name of the session's task before this event
+	if sid, ok := payload["session_id"].(string); ok && origin.Pane != "" {
 		before, err := s.st.Session(sid)
 		if err != nil {
 			return nil, err
 		}
-		hadTask = before != nil && before.TaskID != ""
+		if before != nil && before.TaskID != "" {
+			task, err := s.st.Task(before.TaskID)
+			if err != nil {
+				return nil, err
+			}
+			if task != nil {
+				named = board.WindowName(task)
+			}
+		}
 	}
 	taskID, err := s.board.Apply(payload, origin)
 	if err != nil {
@@ -977,13 +985,14 @@ func (s *Server) hook(r *http.Request) (any, error) {
 	if taskID == "" {
 		return map[string]any{"task": nil}, nil
 	}
-	// A session you started yourself gets its window named the moment it becomes a task.
-	if origin.Pane != "" && !hadTask {
+	// A session you started yourself gets its window named the moment it becomes a task, and again when
+	// the event names its task: after a /clear you type, the first prompt does.
+	if origin.Pane != "" {
 		task, err := s.st.Task(taskID)
 		if err != nil {
 			return nil, err
 		}
-		if task != nil {
+		if task != nil && board.WindowName(task) != named {
 			s.tmux.RenameWindow(origin.Pane, board.WindowName(task), origin.Socket)
 		}
 	}

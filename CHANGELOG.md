@@ -4,6 +4,10 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Changed
+
+- a `/clear` you type closes the task as `Done` and starts a new one in `Backlog`, named by its first prompt: the board used to keep the old card, its title and its state, for an empty session; `hc reset` and a compaction still keep the task, and a session in a Herdr pane now keeps it across a compaction too
+
 ## [1.2.0] - 2026-11-26
 
 Sessions you start in a [Herdr](https://herdr.dev) pane now show on the board, and you answer them from the board or your phone like any other. The web board also fits a phone, and headcoach has a website: [headcoach.rouxlabs.dev](https://headcoach.rouxlabs.dev).
