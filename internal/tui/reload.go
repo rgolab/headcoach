@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/humblebundledore/headcoach/internal/format"
+	"github.com/rouxlabs/headcoach/internal/format"
 )
 
 // stateEnv carries the view of the board to the binary it reloads into, so that a reload after an

@@ -2,9 +2,9 @@
 
 <!-- The README of headcoach: what it does, how to install and use it. -->
 
-[![ci](https://github.com/humblebundledore/headcoach/actions/workflows/ci.yml/badge.svg)](https://github.com/humblebundledore/headcoach/actions/workflows/ci.yml)
-[![release](https://img.shields.io/github/v/release/humblebundledore/headcoach)](https://github.com/humblebundledore/headcoach/releases/latest)
-[![license](https://img.shields.io/github/license/humblebundledore/headcoach)](LICENSE)
+[![ci](https://github.com/rouxlabs/headcoach/actions/workflows/ci.yml/badge.svg)](https://github.com/rouxlabs/headcoach/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/rouxlabs/headcoach)](https://github.com/rouxlabs/headcoach/releases/latest)
+[![license](https://img.shields.io/github/license/rouxlabs/headcoach)](LICENSE)
 
 Coach a team of Claude Code agents: one board for every session, in the terminal and in the browser.
 
@@ -48,15 +48,15 @@ Download the binary for your machine, macOS or Linux, Intel or ARM, check it, an
 
 ```sh
 os=$(uname -s | tr A-Z a-z); arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
-url=https://github.com/humblebundledore/headcoach/releases/latest/download
+url=https://github.com/rouxlabs/headcoach/releases/latest/download
 cd "$(mktemp -d)" && curl -fsSL -O "$url/hc-$os-$arch" -O "$url/SHA256SUMS"
 shasum -a 256 -c SHA256SUMS --ignore-missing && mkdir -p ~/.local/bin && install -m 755 "hc-$os-$arch" ~/.local/bin/hc
 ```
 
 - `~/.local/bin` must be in your `PATH`
 - `hc update` installs the next releases the same way; it talks to GitHub only when you run it
-- with Go: `go install github.com/humblebundledore/headcoach/cmd/hc@latest`
-- from source: `git clone https://github.com/humblebundledore/headcoach.git && cd headcoach && make install`
+- with Go: `go install github.com/rouxlabs/headcoach/cmd/hc@latest`
+- from source: `git clone https://github.com/rouxlabs/headcoach.git && cd headcoach && make install`
 
 Then:
 

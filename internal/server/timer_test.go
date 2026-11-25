@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 func TestTimerIsSetClearedAndChecked(t *testing.T) {

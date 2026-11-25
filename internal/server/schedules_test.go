@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 // monday is a Monday at hour:minute, days later when days is set, local time.

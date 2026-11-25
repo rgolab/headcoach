@@ -7,14 +7,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/board"
-	"github.com/humblebundledore/headcoach/internal/handoff"
-	"github.com/humblebundledore/headcoach/internal/limits"
-	"github.com/humblebundledore/headcoach/internal/review"
-	"github.com/humblebundledore/headcoach/internal/schedule"
-	"github.com/humblebundledore/headcoach/internal/transcript"
-	"github.com/humblebundledore/headcoach/internal/usage"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/board"
+	"github.com/rouxlabs/headcoach/internal/handoff"
+	"github.com/rouxlabs/headcoach/internal/limits"
+	"github.com/rouxlabs/headcoach/internal/review"
+	"github.com/rouxlabs/headcoach/internal/schedule"
+	"github.com/rouxlabs/headcoach/internal/transcript"
+	"github.com/rouxlabs/headcoach/internal/usage"
 )
 
 // Sorts are the orders a list of tasks can be shown in.

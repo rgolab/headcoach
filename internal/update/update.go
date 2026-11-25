@@ -22,8 +22,8 @@ import (
 
 // Where releases live. Tests point them at a fake server.
 var (
-	APIURL      = "https://api.github.com/repos/humblebundledore/headcoach/releases/latest"
-	DownloadURL = "https://github.com/humblebundledore/headcoach/releases/download"
+	APIURL      = "https://api.github.com/repos/rouxlabs/headcoach/releases/latest"
+	DownloadURL = "https://github.com/rouxlabs/headcoach/releases/download"
 )
 
 // Release is the latest published release.

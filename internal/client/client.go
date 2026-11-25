@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/limits"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/limits"
 )
 
 // Client is a daemon address.

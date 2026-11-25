@@ -8,10 +8,10 @@ import (
 	"regexp"
 	"sort"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/review"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/usage"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/review"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/usage"
 )
 
 // metricsDays is the period the review metrics cover.

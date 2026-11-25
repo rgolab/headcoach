@@ -17,8 +17,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/config"
-	"github.com/humblebundledore/headcoach/internal/sh"
+	"github.com/rouxlabs/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/sh"
 )
 
 //go:embed assets

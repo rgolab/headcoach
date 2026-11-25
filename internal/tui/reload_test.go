@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/client"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/client"
 )
 
 // reloaded is the board a reload opens: a fresh one given the saved view, then the same polls.

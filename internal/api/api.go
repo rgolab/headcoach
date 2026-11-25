@@ -3,12 +3,12 @@
 package api
 
 import (
-	"github.com/humblebundledore/headcoach/internal/handoff"
-	"github.com/humblebundledore/headcoach/internal/limits"
-	"github.com/humblebundledore/headcoach/internal/review"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/transcript"
-	"github.com/humblebundledore/headcoach/internal/usage"
+	"github.com/rouxlabs/headcoach/internal/handoff"
+	"github.com/rouxlabs/headcoach/internal/limits"
+	"github.com/rouxlabs/headcoach/internal/review"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/transcript"
+	"github.com/rouxlabs/headcoach/internal/usage"
 )
 
 // Agent is a child row of a task: a sub-agent, or a background command or monitor.

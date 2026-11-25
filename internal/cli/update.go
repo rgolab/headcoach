@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/humblebundledore/headcoach/internal/install"
-	"github.com/humblebundledore/headcoach/internal/update"
-	"github.com/humblebundledore/headcoach/internal/version"
+	"github.com/rouxlabs/headcoach/internal/install"
+	"github.com/rouxlabs/headcoach/internal/update"
+	"github.com/rouxlabs/headcoach/internal/version"
 )
 
 // confirmUpdate asks before the binary is replaced. Tests replace it.

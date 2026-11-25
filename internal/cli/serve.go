@@ -13,12 +13,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/config"
-	"github.com/humblebundledore/headcoach/internal/install"
-	"github.com/humblebundledore/headcoach/internal/server"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/tmux"
-	"github.com/humblebundledore/headcoach/internal/version"
+	"github.com/rouxlabs/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/install"
+	"github.com/rouxlabs/headcoach/internal/server"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/tmux"
+	"github.com/rouxlabs/headcoach/internal/version"
 )
 
 // cmdServe runs the daemon until it is told to stop.

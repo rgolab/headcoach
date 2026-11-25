@@ -10,10 +10,10 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/tmux"
-	"github.com/humblebundledore/headcoach/internal/transcript"
-	"github.com/humblebundledore/headcoach/internal/version"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/tmux"
+	"github.com/rouxlabs/headcoach/internal/transcript"
+	"github.com/rouxlabs/headcoach/internal/version"
 )
 
 // --- meta, pages, the guard ----------------------------------------------------------

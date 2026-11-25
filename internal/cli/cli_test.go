@@ -16,13 +16,13 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/client"
-	"github.com/humblebundledore/headcoach/internal/config"
-	"github.com/humblebundledore/headcoach/internal/install"
-	"github.com/humblebundledore/headcoach/internal/server"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/tmux"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/client"
+	"github.com/rouxlabs/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/install"
+	"github.com/rouxlabs/headcoach/internal/server"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/tmux"
 )
 
 // fakeTmux is a tmux where every pane it was told about exists, and that remembers what was typed.

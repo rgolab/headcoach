@@ -13,10 +13,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/humblebundledore/headcoach/internal/config"
-	"github.com/humblebundledore/headcoach/internal/review"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/tmux"
+	"github.com/rouxlabs/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/review"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/tmux"
 )
 
 // fakeTmux records every call the server would make to tmux.

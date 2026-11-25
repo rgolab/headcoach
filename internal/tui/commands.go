@@ -6,9 +6,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/humblebundledore/headcoach/internal/install"
-	"github.com/humblebundledore/headcoach/internal/update"
-	"github.com/humblebundledore/headcoach/internal/version"
+	"github.com/rouxlabs/headcoach/internal/install"
+	"github.com/rouxlabs/headcoach/internal/update"
+	"github.com/rouxlabs/headcoach/internal/version"
 )
 
 // commandNames are what the : command line knows, in the order its help lists them.

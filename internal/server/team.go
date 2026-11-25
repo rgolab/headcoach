@@ -3,10 +3,10 @@ package server
 import (
 	"net/http"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/board"
-	"github.com/humblebundledore/headcoach/internal/format"
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/board"
+	"github.com/rouxlabs/headcoach/internal/format"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 // team answers with what a coordinator looks at: the tasks under it at any depth, in the order of the

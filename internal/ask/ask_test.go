@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/transcript"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/transcript"
 )
 
 func TestPromptHoldsTheRecentTurnsAndADefaultQuestion(t *testing.T) {

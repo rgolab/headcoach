@@ -15,9 +15,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/sh"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/transcript"
+	"github.com/rouxlabs/headcoach/internal/sh"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/transcript"
 )
 
 // DefaultQuestion is asked when the question is empty.

@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/handoff"
-	"github.com/humblebundledore/headcoach/internal/limits"
-	"github.com/humblebundledore/headcoach/internal/review"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/transcript"
-	"github.com/humblebundledore/headcoach/internal/usage"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/handoff"
+	"github.com/rouxlabs/headcoach/internal/limits"
+	"github.com/rouxlabs/headcoach/internal/review"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/transcript"
+	"github.com/rouxlabs/headcoach/internal/usage"
 )
 
 func TestHuman(t *testing.T) {

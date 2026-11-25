@@ -32,9 +32,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/humblebundledore/headcoach/internal/config"
-	"github.com/humblebundledore/headcoach/internal/review"
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/review"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 // Opening is the last activity of a task whose session the board has just started.

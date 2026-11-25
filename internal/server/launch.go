@@ -5,8 +5,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/humblebundledore/headcoach/internal/sh"
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/sh"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 // efforts are the effort levels claude --effort takes.

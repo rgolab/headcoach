@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 var (

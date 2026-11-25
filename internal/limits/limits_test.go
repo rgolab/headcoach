@@ -3,7 +3,7 @@ package limits
 import (
 	"testing"
 
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 const (

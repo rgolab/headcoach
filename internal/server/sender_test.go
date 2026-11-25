@@ -3,7 +3,7 @@ package server
 import (
 	"testing"
 
-	"github.com/humblebundledore/headcoach/internal/transcript"
+	"github.com/rouxlabs/headcoach/internal/transcript"
 )
 
 // sent lists who sent each message the board typed into a task, and what it typed.

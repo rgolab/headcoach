@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/format"
-	"github.com/humblebundledore/headcoach/internal/review"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/format"
+	"github.com/rouxlabs/headcoach/internal/review"
 )
 
 // gitIn runs git in dir, with no global or system config so the machine's settings do not leak in.
@@ -104,7 +104,7 @@ func TestReviewQueue(t *testing.T) {
 	f.hook("Stop", "s1", obj{"last_assistant_message": "Done."})
 
 	// s2 is a plan in a plain folder, in Review for longer.
-	f.hook("UserPromptSubmit", "s2", obj{"prompt": "/architect think", "cwd": f.tmp}, "X-Tmux-Pane", "%2")
+	f.hook("UserPromptSubmit", "s2", obj{"prompt": "/architect sketch the cache", "cwd": f.tmp}, "X-Tmux-Pane", "%2")
 	f.hook("Stop", "s2", obj{"last_assistant_message": "Here."}, "X-Tmux-Pane", "%2")
 	f.st.Exec("UPDATE history SET at = at - 3600 WHERE task_id = 's2' AND state = 'review'")
 
