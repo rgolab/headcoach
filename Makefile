@@ -7,7 +7,7 @@ TARGETS := darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
 .PHONY: build test check install dist
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o hc ./cmd/hc
+	go build -trimpath -ldflags "$(LDFLAGS)" -o hc ./cmd/hc
 
 test:
 	go test ./...
@@ -20,7 +20,7 @@ check:
 
 # Puts hc in GOBIN, or in GOPATH/bin.
 install:
-	go install -ldflags "$(LDFLAGS)" ./cmd/hc
+	go install -trimpath -ldflags "$(LDFLAGS)" ./cmd/hc
 
 # One static binary per target, in dist/, and their SHA-256 sums.
 dist:
