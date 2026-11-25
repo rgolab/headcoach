@@ -139,6 +139,7 @@ Then:
 - closing the board stops nothing
 - `private_tmux = false` opens the board's sessions as windows in your tmux instead
 - a session you start in a [Herdr](https://herdr.dev) pane is tracked with that pane, and the board shows `herdr` where it runs
+- the web board marks each live session on its card, its list row and its panel: `hc` in the board's tmux, `tmux` in yours, `herdr` in a Herdr pane
 - a pane moved to another workspace changes its id: the board finds it again by its session id, or, without Herdr's Claude Code integration, as the only agent in the session's directory that no other session holds
 - with two such agents it cannot tell which one is the session: it takes no reply and is not resumed, answer it in Herdr
 - `hc reply` sends to it with `herdr agent prompt`, `hc keys` with `herdr agent send-keys`

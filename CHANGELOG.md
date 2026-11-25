@@ -4,6 +4,21 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Added
+
+- the web board marks where a live session runs, `hc` for the board's tmux, `tmux` for yours or `herdr`, on its card, its list row and its panel
+- the web board shows the profile of a task as a pill of its own and in the task panel, and its repo in bold
+
+### Changed
+
+- a window too narrow for six columns, but wider than a phone, scrolls the web board's columns sideways instead of stacking them, so each stays a drop target
+
+### Fixed
+
+- the `Needs you` label in the web task panel was orange on orange
+- the terminal of a question in the web task panel showed its first lines, it now shows its last ones unless you scrolled up in it
+- the web board scrolled under an open task panel on a wide screen
+
 ## [1.2.0] - 2026-11-26
 
 Sessions you start in a [Herdr](https://herdr.dev) pane now show on the board, and you answer them from the board or your phone like any other. The web board also fits a phone, and headcoach has a website: [headcoach.rouxlabs.dev](https://headcoach.rouxlabs.dev).
