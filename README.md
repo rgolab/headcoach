@@ -291,7 +291,8 @@ Then:
 - `hc config init` writes `~/.config/headcoach/config.toml`, with every key explained
 - `hc hooks install -c ~/.claude-team -c ~/.claude-personal` covers several Claude Code profiles
 - one `[profiles]` line per profile tells the board how to launch it
-- `theme` picks the board's colors: `terminal` (follows your terminal), `bright`, `nord` or `k9s`
+- `theme` picks the colors of the terminal and web boards: `terminal` (follows your terminal, or the system's light or dark mode in the browser), `bright`, `nord` or `k9s`
+- the Theme menu of the web board picks another one for that browser only, and `<theme> (config)` follows the config again
 - `hc tui --theme k9s` tries a theme without touching the config
 - `C` on the board saves its columns to `columns` next to the board's database, one name per line, a hidden one after a `-`
 - `welcomed` next to the board's database says the board showed its welcome; delete it to see the welcome again

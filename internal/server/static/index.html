@@ -8,6 +8,12 @@
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icon-192.png">
 <meta name="theme-color" content="#2b5fd9">
+<script>
+try {
+  const p = localStorage.getItem("palette") || localStorage.getItem("config-palette");
+  if (["bright", "nord", "k9s"].includes(p)) document.documentElement.dataset.palette = p;
+} catch (err) {}
+</script>
 <style>
 /* Layout: one working screen. Six state columns side by side, a centred drawer over them for one session. */
 :root {
@@ -16,7 +22,7 @@
   --run: #2b5fd9; --need: #a85a00; --need-bg: #fff0d9; --need-line: #e6b566;
   --rev: #6a45c2; --done: #2c7a4d; --idle: #6b7382; --hot: #c0392b; --scrim: rgba(15, 18, 24, .38); --you-bg: #ece6fb; --you-line: #b9a8ec; --agent-bg: #e8effd; --agent-line: #a5bdf2; --tool-bg: #e3f1e8; --tool-line: #9ccdb0;
   --team-0: #0e7490; --team-1: #a21caf; --team-2: #15803d; --team-3: #1d4ed8; --team-4: #b45309; --team-5: #6d28d9;
-  --profile: #0f766e;
+  --profile: #0f766e; --warm: var(--need); --heading: var(--fg);
   --sans: system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
 }
@@ -40,6 +46,38 @@
   --profile: #2dd4bf;
   color-scheme: dark;
 }
+/* The themes of the terminal board, from internal/tui/theme.go, for theme or the Theme menu.
+   terminal is the light or dark palette above; these are dark whatever the system says. */
+:root[data-palette="bright"] {
+  --bg: #121212; --surface: #1c1c1c; --panel: #262626; --line: #3a3a3a;
+  --fg: #d0d0d0; --muted: #8a8a8a; --accent: #5fd7ff; --on-accent: #121212;
+  --run: #5fafff; --need: #ffaf5f; --rev: #ff5f87; --done: #87d75f; --idle: #8a8a8a; --hot: #ff5f5f; --warm: #ffd75f;
+  --team-0: #5fd7ff; --team-1: #ff87ff; --team-2: #87ff87; --team-3: #87afff; --team-4: #ffd787; --team-5: #d787ff;
+  --profile: #5fd7d7;
+}
+/* nord's muted #616E88 is too faint for small text on a lit background: the web board takes a lighter one. */
+:root[data-palette="nord"] {
+  --bg: #2e3440; --surface: #3b4252; --panel: #353c4a; --line: #4c566a;
+  --fg: #d8dee9; --muted: #9099ab; --accent: #88c0d0; --on-accent: #2e3440;
+  --run: #81a1c1; --need: #ebcb8b; --rev: #b48ead; --done: #a3be8c; --idle: #9099ab; --hot: #bf616a; --warm: #ebcb8b;
+  --team-0: #88c0d0; --team-1: #b48ead; --team-2: #a3be8c; --team-3: #81a1c1; --team-4: #d08770; --team-5: #ebcb8b;
+  --profile: #8fbcbb;
+}
+:root[data-palette="k9s"] {
+  --bg: #000000; --surface: #080808; --panel: #121212; --line: #303030;
+  --fg: #00d7ff; --muted: #8a8a8a; --accent: #ffaf00; --on-accent: #000000; --heading: #eeeeee;
+  --run: #00afff; --need: #ffaf00; --rev: #ff00ff; --done: #00d787; --idle: #8a8a8a; --hot: #ff0000; --warm: #ffd700;
+  --team-0: #00ffff; --team-1: #ff5fff; --team-2: #87ff00; --team-3: #5fafff; --team-4: #ffd700; --team-5: #d75fff;
+  --profile: #00ffff;
+}
+:root[data-palette="bright"], :root[data-palette="nord"], :root[data-palette="k9s"] {
+  --need-bg: color-mix(in srgb, var(--need) 12%, var(--surface)); --need-line: color-mix(in srgb, var(--need) 45%, var(--surface));
+  --you-bg: color-mix(in srgb, var(--rev) 12%, var(--surface)); --you-line: color-mix(in srgb, var(--rev) 40%, var(--surface));
+  --agent-bg: color-mix(in srgb, var(--run) 12%, var(--surface)); --agent-line: color-mix(in srgb, var(--run) 40%, var(--surface));
+  --tool-bg: color-mix(in srgb, var(--done) 10%, var(--surface)); --tool-line: color-mix(in srgb, var(--done) 35%, var(--surface));
+  --scrim: rgba(0, 0, 0, .6);
+  color-scheme: dark;
+}
 * { box-sizing: border-box; }
 body {
   background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 14px; line-height: 1.45;
@@ -50,7 +88,7 @@ button, select, textarea, input { font: inherit; color: inherit; }
 .mono { font-family: var(--mono); font-size: 12px; }
 
 .top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-bottom: 16px; }
-.top h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -.01em; }
+.top h1 { font-size: 18px; font-weight: 600; margin: 0; letter-spacing: -.01em; color: var(--heading); }
 .top .grow { flex: 1; }
 .attn { font-size: 13px; color: var(--need); font-weight: 500; }
 .btn {
@@ -75,7 +113,7 @@ button, select, textarea, input { font: inherit; color: inherit; }
 .col { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; min-width: 0; }
 .col.over { border-color: var(--accent); }
 .col-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); }
-.col-head h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; margin: 0; }
+.col-head h2 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; margin: 0; color: var(--heading); }
 .col-head .n { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--idle); flex: none; }
 .s-running .dot { background: var(--run); }
@@ -122,7 +160,7 @@ button, select, textarea, input { font: inherit; color: inherit; }
 .tok { font-family: var(--mono); font-size: 12px; color: var(--muted); white-space: nowrap; }
 .kid .tok { margin-left: auto; }
 .ctx { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; white-space: nowrap; color: var(--done); }
-.ctx.warm { color: var(--need); }
+.ctx.warm { color: var(--warm); }
 .ctx.hot { color: var(--hot); font-weight: 500; }
 .ctx .bar { width: 44px; height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
 .ctx .bar span { display: block; height: 100%; background: currentColor; transition: width .6s; }
@@ -169,7 +207,7 @@ button, select, textarea, input { font: inherit; color: inherit; }
   box-shadow: 0 18px 60px rgba(0, 0, 0, .35); display: flex; flex-direction: column;
 }
 .d-head { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border-bottom: 1px solid var(--line); }
-.d-head h2 { font-size: 16px; font-weight: 600; margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; text-wrap: balance; }
+.d-head h2 { font-size: 16px; font-weight: 600; margin: 0; color: var(--heading); flex: 1; min-width: 0; overflow-wrap: anywhere; text-wrap: balance; }
 .d-body { overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; flex: 1; min-height: 0; }
 .label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin-bottom: 6px; }
 .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; }
@@ -336,6 +374,7 @@ a.tag:hover { background: var(--accent); color: var(--on-accent); }
   <label class="sort">Sort <select id="sortby">
     <option value="state">by state</option><option value="idle">by idle time</option><option value="cost">by cost</option><option value="tokens">by tokens used</option><option value="ctx">by context size</option>
   </select></label>
+  <label class="sort">Theme <select id="palette"></select></label>
   <div class="seg" role="group" aria-label="View">
     <button class="btn" type="button" data-view="board">Board</button>
     <button class="btn" type="button" data-view="list">List</button>
@@ -378,6 +417,10 @@ let tasks = [], detail = null, team = null, openId = null, dragId = null, view =
 let boardSig = "", detailSig = "", loaded = false, confirmDelete = false, editingTitle = false;
 try { if (localStorage.getItem("view") === "list") view = "list"; } catch (err) {}
 let sortBy = "state";
+const PALETTES = ["terminal", "bright", "nord", "k9s"];
+// palette is the theme picked in the menu, kept by this browser; empty follows the config's theme.
+let palette = "", configTheme = "terminal";
+try { palette = localStorage.getItem("palette") || ""; configTheme = localStorage.getItem("config-palette") || "terminal"; } catch (err) {}
 try { sortBy = ["idle", "cost", "tokens", "ctx"].includes(localStorage.getItem("sort")) ? localStorage.getItem("sort") : "state"; } catch (err) {}
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -438,6 +481,15 @@ async function api(method, path, data) {
   if (res.status === 401) showPair();
   if (!res.ok) throw Object.assign(new Error(json.error || `The daemon answered ${res.status}`), { status: res.status });
   return json;
+}
+
+function applyPalette() {
+  const name = PALETTES.includes(palette) ? palette : PALETTES.includes(configTheme) ? configTheme : "terminal";
+  if (name === "terminal") delete document.documentElement.dataset.palette;
+  else document.documentElement.dataset.palette = name;
+  const menu = $("#palette");
+  menu.innerHTML = `<option value="" title="The theme of the config">${esc(configTheme)} (config)</option>` + PALETTES.map(p => `<option>${p}</option>`).join("");
+  menu.value = PALETTES.includes(palette) ? palette : "";
 }
 
 /* ---------- pairing ---------- */
@@ -825,6 +877,11 @@ document.addEventListener("change", e => {
     try { localStorage.setItem("sort", sortBy); } catch (err) {}
     renderBoard(); return;
   }
+  if (e.target.id === "palette") {
+    palette = e.target.value;
+    try { palette ? localStorage.setItem("palette", palette) : localStorage.removeItem("palette"); } catch (err) {}
+    applyPalette(); return;
+  }
   if (e.target.id === "moveto") act(() => api("PATCH", `/api/tasks/${openId}`, { state: e.target.value }));
 });
 document.addEventListener("dragstart", e => {
@@ -853,11 +910,15 @@ document.addEventListener("drop", e => {
 });
 
 async function boot() {
+  applyPalette();
   renderBoard();
   try {
     const meta = await api("GET", "/api/meta");
     $("#new-profile").innerHTML = meta.profiles.map(p => `<option>${esc(p)}</option>`).join("");
     $("#dirs").innerHTML = meta.dirs.map(d => `<option value="${esc(d)}"></option>`).join("");
+    configTheme = meta.theme || "terminal";
+    try { localStorage.setItem("config-palette", configTheme); } catch (err) {}
+    applyPalette();
   } catch (err) { if (err.status === 401) return; }
   await refresh(true);
   setInterval(() => { if (!document.hidden) refresh(false); }, POLL_MS);

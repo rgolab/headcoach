@@ -8,6 +8,7 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 - the web board marks where a live session runs, `hc` for the board's tmux, `tmux` for yours or `herdr`, on its card, its list row and its panel
 - the web board shows the profile of a task as a pill of its own and in the task panel, and its repo in bold
+- the web board takes the themes of the terminal board: it starts with the one `theme` sets, and its Theme menu picks another for that browser
 
 ### Changed
 
