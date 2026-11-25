@@ -140,12 +140,15 @@ func (s *Server) resetInput(r *http.Request) (*store.Task, *store.Session, strin
 	if !between {
 		return nil, nil, "", fail(409, "This task is %s: reset it between two turns", store.StateName(task.State))
 	}
-	sess, err := s.liveSession(task.ID)
+	sess, err := s.reachable(task.ID)
 	if err != nil {
 		return nil, nil, "", err
 	}
 	if sess == nil {
 		return nil, nil, "", fail(409, "This task has no live session: start it, its handoff is waiting at %s", h.Path)
+	}
+	if sess.Pane == "" {
+		return nil, nil, "", fail(409, "The session runs in Herdr: reset it there, its handoff is waiting at %s", h.Path)
 	}
 	if typed, shown := promptBox(s.tmux.CaptureStyled(sess.Pane, sess.Socket)); !shown || typed != "" {
 		return nil, nil, "", fail(409, "The session's prompt is not empty, or a dialog is up: nothing was cleared")

@@ -21,6 +21,7 @@ import (
 	"github.com/rouxlabs/headcoach/internal/client"
 	"github.com/rouxlabs/headcoach/internal/config"
 	"github.com/rouxlabs/headcoach/internal/format"
+	"github.com/rouxlabs/headcoach/internal/herdr"
 	"github.com/rouxlabs/headcoach/internal/install"
 	"github.com/rouxlabs/headcoach/internal/limits"
 	"github.com/rouxlabs/headcoach/internal/store"
@@ -75,6 +76,10 @@ var (
 		cmd := exec.Command(argv[0], argv[1:]...)
 		cmd.Env, cmd.Stdin, cmd.Stdout, cmd.Stderr = environ, os.Stdin, tmux.QuietDetach(os.Stdout), os.Stderr
 		return cmd.Run()
+	}
+	// runHerdrAttach runs a herdr agent attach in this terminal, Ctrl-] coming back.
+	runHerdrAttach = func(argv []string) error {
+		return herdr.NewAttach(argv).Run()
 	}
 	openBrowser = func(url string) {
 		opener := "xdg-open"
@@ -427,7 +432,7 @@ func cmdShow(e *env, p parsed) error {
 		state += "  (no live session)"
 	}
 	persona := orDash(t.Persona)
-	where := orDash(map[string]string{"hc": "the board's own tmux, Ctrl-] detaches", "own": "your tmux"}[t.Tmux])
+	where := orDash(map[string]string{"hc": "the board's own tmux, Ctrl-] detaches", "own": "your tmux", "herdr": "Herdr"}[t.Tmux])
 	e.printf("%s\n\n", t.Title)
 	lines := [][2]string{
 		{"task", t.ID}, {"state", state}, {"repo", t.Repo}, {"branch", t.Branch}, {"dir", t.Cwd},
@@ -844,6 +849,9 @@ func cmdAttach(e *env, p parsed) error {
 	attach, err := e.client.Enter(t)
 	if err != nil {
 		return err
+	}
+	if len(attach) > 0 && t.Tmux == "herdr" {
+		return runHerdrAttach(attach)
 	}
 	if len(attach) > 0 {
 		return runAttach(attach, tmux.AttachEnv())

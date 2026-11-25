@@ -819,7 +819,7 @@ func describe(t *api.Task) []cell {
 	if persona == "" {
 		persona = "-"
 	}
-	where := map[string]string{"hc": "the board's own tmux, Ctrl-] detaches", "own": "your tmux"}[t.Tmux]
+	where := map[string]string{"hc": "the board's own tmux, Ctrl-] detaches", "own": "your tmux", "herdr": "Herdr"}[t.Tmux]
 	if where == "" {
 		where = "-"
 	}

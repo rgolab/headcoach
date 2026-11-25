@@ -622,7 +622,7 @@ function renderDrawer() {
   if (t.state === "needs" && t.ask) log += `<div class="turn ask"><div class="who">Needs you</div>${esc(t.ask)}</div>`;
   if (!log) log = `<div class="empty">${t.session_id ? "Nothing in the session yet." : "No session yet. Start the task to open one."}</div>`;
   const never = !t.session_id;
-  const inBoard = t.attach && t.attach.length > 0;  // live in the board's own tmux: entered from a terminal
+  const inBoard = t.attach && t.attach.length > 0;  // live in the board's own tmux or in Herdr: entered from a terminal
   const termLabel = t.live ? "Go to terminal" : never ? "Start in tmux" : "Resume in tmux";
   body.innerHTML = `
     <dl class="kv">
@@ -635,14 +635,14 @@ function renderDrawer() {
       <dt>Context</dt><dd>${ctxHtml(t.context) || "none yet"}</dd>
       <dt>Cost</dt><dd>${costHtml(t) ? costHtml(t) + ` <span class="tok">at API prices</span>` : "not reported"}</dd>
       <dt>Tokens</dt><dd>${tokensHtml(t.tokens) || "none yet"}${tokensHtml(t.agent_tokens) ? ` <span class="tok">(sub-agents: </span>${tokensHtml(t.agent_tokens)}<span class="tok">)</span>` : ""}</dd>
-      <dt>Terminal</dt><dd>${inBoard ? "live in the board's tmux" : t.live ? `live in tmux pane <span class="mono">${esc(t.pane)}</span>` : never ? "not started" : "closed"}</dd>
+      <dt>Terminal</dt><dd>${t.tmux === "herdr" ? `live in Herdr pane <span class="mono">${esc(t.pane)}</span>` : inBoard ? "live in the board's tmux" : t.live ? `live in tmux pane <span class="mono">${esc(t.pane)}</span>` : never ? "not started" : "closed"}</dd>
     </dl>
     <div>
       <div class="label">State</div>
       <div class="trail">${trail}</div>
       <div class="moverow"><label for="moveto">Move to</label>
         <select id="moveto">${STATES.map(s => `<option value="${s.id}"${s.id === t.state ? " selected" : ""}>${s.name}</option>`).join("")}</select>
-        ${inBoard ? "" : `<button class="btn small" type="button" id="term">${termLabel}</button>`}
+        ${inBoard && t.tmux !== "herdr" ? "" : `<button class="btn small" type="button" id="term">${termLabel}</button>`}
         <button class="btn small" type="button" id="pin">${t.pinned ? "Unpin" : "Pin to top"}</button>
         <button class="btn small danger" type="button" id="del">${confirmDelete ? "Confirm delete" : "Delete"}</button>
       </div>

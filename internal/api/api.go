@@ -76,10 +76,11 @@ type Task struct {
 	StateName string `json:"state_name"`
 	Live      bool   `json:"live"`
 	Pane      string `json:"pane"`
-	// Tmux says where the live session runs: "hc" in the board's own tmux, "own" in yours. Empty
-	// when no session is live.
+	// Tmux says where the live session runs: "hc" in the board's own tmux, "own" in yours, "herdr" in a
+	// Herdr pane. Empty when no session is live.
 	Tmux string `json:"tmux"`
-	// Attach is the command that takes a terminal into the session, when it runs in the board's own tmux.
+	// Attach is the command that takes a terminal into the session, when it runs in the board's own tmux or
+	// in Herdr.
 	Attach    []string `json:"attach"`
 	SessionID string   `json:"session_id"`
 	Age       int      `json:"age"`

@@ -66,6 +66,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     task_id         TEXT,
     pane            TEXT NOT NULL DEFAULT '',
     socket          TEXT NOT NULL DEFAULT '',
+    herdr_pane      TEXT NOT NULL DEFAULT '',
+    herdr_socket    TEXT NOT NULL DEFAULT '',
     window          INTEGER NOT NULL DEFAULT 0,
     cost            REAL NOT NULL DEFAULT 0,
     effort          TEXT NOT NULL DEFAULT '',
@@ -225,6 +227,8 @@ type Session struct {
 	TaskID         string // empty until the session belongs to a task
 	Pane           string
 	Socket         string
+	HerdrPane      string // Herdr pane id, empty outside Herdr
+	HerdrSocket    string // socket of the Herdr server that holds the pane
 	Window         int
 	Cost           float64
 	Effort         string // the effort level its status line reports. Empty until it does
@@ -289,6 +293,8 @@ func Open(path string) (*Store, error) {
 		{"sessions", "window", "INTEGER NOT NULL DEFAULT 0"},
 		{"sessions", "cost", "REAL NOT NULL DEFAULT 0"},
 		{"sessions", "effort", "TEXT NOT NULL DEFAULT ''"},
+		{"sessions", "herdr_pane", "TEXT NOT NULL DEFAULT ''"},
+		{"sessions", "herdr_socket", "TEXT NOT NULL DEFAULT ''"},
 		{"agents", "persona", "TEXT NOT NULL DEFAULT ''"},
 	} {
 		if err := s.addColumn(c.table, c.column, c.decl); err != nil {
@@ -554,8 +560,8 @@ func (s *Store) DeleteTask(id string) error {
 
 // --- sessions ------------------------------------------------------------------------
 
-const sessionColumns = "session_id, task_id, pane, socket, window, cost, effort, config_dir, transcript_path, cwd, live," +
-	" started_at, ended_at"
+const sessionColumns = "session_id, task_id, pane, socket, herdr_pane, herdr_socket, window, cost, effort, config_dir," +
+	" transcript_path, cwd, live, started_at, ended_at"
 
 func scanSession(row scanner) (*Session, error) {
 	var (
@@ -563,8 +569,8 @@ func scanSession(row scanner) (*Session, error) {
 		task  sql.NullString
 		ended sql.NullFloat64
 	)
-	err := row.Scan(&sess.SessionID, &task, &sess.Pane, &sess.Socket, &sess.Window, &sess.Cost, &sess.Effort, &sess.ConfigDir,
-		&sess.TranscriptPath, &sess.Cwd, &sess.Live, &sess.StartedAt, &ended)
+	err := row.Scan(&sess.SessionID, &task, &sess.Pane, &sess.Socket, &sess.HerdrPane, &sess.HerdrSocket, &sess.Window, &sess.Cost,
+		&sess.Effort, &sess.ConfigDir, &sess.TranscriptPath, &sess.Cwd, &sess.Live, &sess.StartedAt, &ended)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

@@ -78,6 +78,9 @@ type Origin struct {
 	Socket    string // socket of the tmux server that holds the pane
 	ConfigDir string // CLAUDE_CONFIG_DIR of the session
 	TaskHint  string // id of the task the board started the session for
+
+	HerdrPane   string // Herdr pane id, empty outside Herdr
+	HerdrSocket string // socket of the Herdr server that holds the pane
 }
 
 // Board applies events to the database. It holds no state of its own.
@@ -117,9 +120,9 @@ func (b *Board) touchSession(p Payload, o Origin) (*store.Session, error) {
 	}
 	if sess == nil {
 		_, err = b.st.Exec(
-			"INSERT INTO sessions (session_id, pane, socket, config_dir, transcript_path, cwd, started_at)"+
-				" VALUES (?, ?, ?, ?, ?, ?, ?)",
-			sid, o.Pane, o.Socket, o.ConfigDir, transcript, cwd, store.Now(),
+			"INSERT INTO sessions (session_id, pane, socket, herdr_pane, herdr_socket, config_dir, transcript_path, cwd,"+
+				" started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			sid, o.Pane, o.Socket, o.HerdrPane, o.HerdrSocket, o.ConfigDir, transcript, cwd, store.Now(),
 		)
 	} else {
 		_, err = b.st.Exec(
@@ -128,8 +131,10 @@ func (b *Board) touchSession(p Payload, o Origin) (*store.Session, error) {
 				" pane = CASE WHEN ?2 != '' THEN ?2 ELSE pane END,"+
 				" config_dir = CASE WHEN ?3 != '' THEN ?3 ELSE config_dir END,"+
 				" transcript_path = CASE WHEN ?4 != '' THEN ?4 ELSE transcript_path END,"+
-				" cwd = CASE WHEN ?5 != '' THEN ?5 ELSE cwd END WHERE session_id = ?6",
-			o.Socket, o.Pane, o.ConfigDir, transcript, cwd, sid,
+				" cwd = CASE WHEN ?5 != '' THEN ?5 ELSE cwd END,"+
+				" herdr_socket = CASE WHEN ?6 != '' THEN ?6 ELSE herdr_socket END,"+
+				" herdr_pane = CASE WHEN ?7 != '' THEN ?7 ELSE herdr_pane END WHERE session_id = ?8",
+			o.Socket, o.Pane, o.ConfigDir, transcript, cwd, o.HerdrSocket, o.HerdrPane, sid,
 		)
 		// Only a new start or a new prompt proves the session is alive: a late event must not revive it.
 		if name := p.str("hook_event_name"); err == nil && (name == "SessionStart" || name == "UserPromptSubmit") {

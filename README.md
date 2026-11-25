@@ -42,6 +42,7 @@ The same board in the browser:
 - Claude Code
 - tmux
 - `curl`
+- [Herdr](https://herdr.dev), only for sessions you run in it
 - Go 1.25 or later, only to build from source
 
 ## Install
@@ -137,6 +138,18 @@ Then:
 - a session you start yourself is tracked too, and stays where you started it
 - closing the board stops nothing
 - `private_tmux = false` opens the board's sessions as windows in your tmux instead
+- a session you start in a [Herdr](https://herdr.dev) pane is tracked with that pane, and the board shows `herdr` where it runs
+- a pane moved to another workspace changes its id: the board finds it again by its session id, or, without Herdr's Claude Code integration, as the only agent in the session's directory that no other session holds
+- with two such agents it cannot tell which one is the session: it takes no reply and is not resumed, answer it in Herdr
+- `hc reply` sends to it with `herdr agent prompt`, `hc keys` with `herdr agent send-keys`
+- the board never resumes a session Herdr still runs, parked or not: a second `claude` would answer in the same conversation
+- `a`, `hc attach` and the phone enter it with `herdr agent attach`, and `Ctrl-]` comes back: it hangs that attach up, the agent runs on
+- while you are in, the pane takes the size of your screen, and its own again once you leave
+- the web board's Go to terminal brings its pane to the front in Herdr
+- a dialog there takes its keys, not a reply: Herdr takes no prompt while one shows
+- parking it, or its timer running out, leaves its Herdr pane open
+- `hc reset` and a coordinator's news reach only a session in tmux
+- once Herdr no longer runs it in a pane, or `herdr` is not installed, it counts as closed, and a reply resumes it in tmux
 
 ## Schedules
 
@@ -249,7 +262,7 @@ Then:
 - on a phone the board is one list grouped by state, `Needs me` first, and a task opens full screen with the reply box and the keys for its question above the keyboard
 - `hc devices` lists the paired devices, `hc devices rm phone` unpairs one
 - hooks and pairing stay on the computer: a paired device cannot pair another
-- a paired app can enter a session in the board's tmux, the way `a` does on the terminal board: `GET /api/tasks/<id>/attach` runs `tmux attach` on the computer and streams it over a WebSocket
+- a paired app can enter a session in the board's tmux, or in Herdr, the way `a` does on the terminal board: `GET /api/tasks/<id>/attach` runs `tmux attach`, or `herdr agent attach`, on the computer and streams it over a WebSocket
 - leaving from the phone, or losing the connection, detaches: the session keeps running
 - the phone and the computer can be in the same session at once, and the window takes the size of the screen used last
 - a session you started in your own tmux can only be entered from the computer
@@ -318,6 +331,7 @@ Then:
 - `internal/tui`: the terminal board
 - `internal/install`: the hooks in `settings.json` and the login service
 - `internal/tmux`: everything that touches tmux
+- `internal/herdr`: everything that touches Herdr
 
 ## License
 

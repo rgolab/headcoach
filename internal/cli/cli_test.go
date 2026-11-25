@@ -19,6 +19,7 @@ import (
 	"github.com/rouxlabs/headcoach/internal/api"
 	"github.com/rouxlabs/headcoach/internal/client"
 	"github.com/rouxlabs/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/herdr"
 	"github.com/rouxlabs/headcoach/internal/install"
 	"github.com/rouxlabs/headcoach/internal/server"
 	"github.com/rouxlabs/headcoach/internal/store"
@@ -651,6 +652,37 @@ func TestAttach(t *testing.T) {
 	f.ok("attach", "mine")
 	if want := []string{"/bin/sh", "-c", "claude-team --session-id mine0001", "TMUX=/tmp/outer,1,0", "HC_TASK=mine0001"}; !reflect.DeepEqual(ran[len(ran)-1], want) {
 		t.Errorf("attach ran %v, want %v", ran[len(ran)-1], want)
+	}
+}
+
+// herdrAgents is a Herdr whose every server runs these agents, by pane.
+type herdrAgents map[string]herdr.Agent
+
+func (h herdrAgents) Agents(string) map[string]herdr.Agent    { return h }
+func (h herdrAgents) Prompt(string, string, string) error     { return nil }
+func (h herdrAgents) SendKeys(string, []string, string) error { return nil }
+func (h herdrAgents) Capture(string, string) string           { return "" }
+func (h herdrAgents) Focus(string, string) error              { return nil }
+
+func TestAttachToASessionInHerdr(t *testing.T) {
+	f := newFixture(t)
+	f.srv.Herdr = herdrAgents{"w1:p2": {Session: "herd0001"}}
+	var ran []string
+	old := runHerdrAttach
+	defer func() { runHerdrAttach = old }()
+	runHerdrAttach = func(argv []string) error { ran = argv; return nil }
+	socket := filepath.Join(f.tmp, "herdr.sock")
+	raw, _ := json.Marshal(map[string]any{"hook_event_name": "UserPromptSubmit", "session_id": "herd0001", "prompt": "x"})
+	req, _ := http.NewRequest("POST", f.url+"/api/hook", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Herdr-Pane", "w1:p2")
+	req.Header.Set("X-Herdr-Socket", socket)
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("hook: %v %v", resp, err)
+	}
+	f.ok("attach", "herd")
+	if want := herdr.AttachCommand("w1:p2", config.RealPath(socket)); !reflect.DeepEqual(ran, want) {
+		t.Errorf("attach ran %v, want %v", ran, want)
 	}
 }
 
