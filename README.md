@@ -8,11 +8,11 @@
 
 Coach a team of Claude Code agents: one board for every session, in the terminal and in the browser.
 
-![The terminal board: tasks and sub-agents, a task's details, the review queue, the schedules, and a task lighting up as it moves to Done](docs/demo.gif)
+![The terminal board: entering a session, replying to the agent and coming back with Ctrl-\], a coordinator and the tasks it drives, the fuzzy filter, the coordinator view, a handoff in the details, a pin, the review queue, the schedules, a task lighting up as it moves to Done, and a delete in 10 minutes](docs/demo.gif)
 
 The same board in the browser:
 
-![The web board: one column per state](docs/web.png)
+![The web board: one column per state, each task tagged with the coordinator that drives it](docs/web.png)
 
 ## What it does
 
