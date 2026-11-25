@@ -976,29 +976,29 @@ func TestBackgroundJobsThatAreNotRunningOrNotKnownAreIgnored(t *testing.T) {
 func TestPersona(t *testing.T) {
 	f := newFixture(t)
 	skill := func(name string) P { return P{"tool_name": "Skill", "tool_input": map[string]any{"skill": name}} }
-	f.on("UserPromptSubmit", P{"prompt": "be the Python developer"})
+	f.on("UserPromptSubmit", P{"prompt": "act as a Go developer"})
 	eq(t, f.task("s1").Persona, "")
-	f.on("PreToolUse", skill("acme-python-developer"))
-	eq(t, f.task("s1").Persona, "acme-python-developer")
+	f.on("PreToolUse", skill("acme-rust-developer"))
+	eq(t, f.task("s1").Persona, "acme-rust-developer")
 	f.on("PreToolUse", skill("acme-toolkit:reviewer")) // the plugin prefix is dropped
 	eq(t, f.task("s1").Persona, "reviewer")
 	f.on("PreToolUse", skill("acme-toolkit:commit")) // not a persona
 	eq(t, f.task("s1").Persona, "reviewer")
 	f.on("PreToolUse", skill("autotester")) // a persona name inside another word is not one
 	eq(t, f.task("s1").Persona, "reviewer")
-	f.on("PreToolUse", skill("developer-c"))
-	eq(t, f.task("s1").Persona, "developer-c")
-	f.on("UserPromptSubmit", P{"prompt": "/acme-c-developer fix PROJ-1"})
-	eq(t, f.task("s1").Persona, "acme-c-developer")
+	f.on("PreToolUse", skill("developer-go"))
+	eq(t, f.task("s1").Persona, "developer-go")
+	f.on("UserPromptSubmit", P{"prompt": "/acme-go-developer fix PROJ-1"})
+	eq(t, f.task("s1").Persona, "acme-go-developer")
 	f.on("UserPromptSubmit", P{"prompt": "/clear"})
-	eq(t, f.task("s1").Persona, "acme-c-developer")
+	eq(t, f.task("s1").Persona, "acme-go-developer")
 
 	// A sub-agent's persona is its own, the task keeps the main session's.
 	f.on("SubagentStart", P{"agent_id": "a1", "agent_type": "general-purpose"})
 	sub := skill("reviewer")
 	sub["agent_id"] = "a1"
 	f.on("PreToolUse", sub)
-	eq(t, f.task("s1").Persona, "acme-c-developer")
+	eq(t, f.task("s1").Persona, "acme-go-developer")
 	eq(t, f.column("SELECT persona FROM agents WHERE agent_id = 'a1'"), []string{"reviewer"})
 	// Its first tool call can arrive before its SubagentStart: one row either way.
 	f.on("PreToolUse", P{"tool_name": "Agent", "tool_input": map[string]any{"subagent_type": "Plan", "description": "plan it"}})
