@@ -155,13 +155,16 @@ func init() {
 			{name: "config-dir", short: "c", value: true, multi: true, help: "a Claude Code config directory; repeat for several (default: $CLAUDE_CONFIG_DIR or ~/.claude)"},
 		}},
 		{name: "config", args: "[init]", help: "write a commented config file if there is none", max: 1, run: cmdConfig},
-		{name: "service", args: "[install|uninstall|restart|status]", help: "run the daemon at login", max: 1, run: cmdService},
+		{name: "service", args: "[install|uninstall|restart|status]", help: "run the daemon at login", max: 1, run: cmdService, flags: []flag{
+			{name: "tailscale", help: "install: put the board on the tailnet each time the daemon starts, as tailscale serve --bg does"},
+		}},
 		{name: "restart", help: "restart the daemon service", run: cmdRestart},
 		{name: "update", help: "replace hc with the latest release, checked against its SHA256SUMS", run: cmdUpdate, flags: []flag{
 			{name: "yes", short: "y", help: "do not ask before replacing"},
 		}},
 		{name: "serve", help: "run the daemon and the web board", run: cmdServe, flags: []flag{
 			{name: "verbose", short: "v", help: "log every request"},
+			{name: "tailscale", help: "put the board on HTTPS inside the tailnet with tailscale serve, on port 443"},
 		}},
 	}
 }
@@ -1024,7 +1027,8 @@ func cmdService(e *env, p parsed) error {
 		if !install.ServiceInstalled() && runningVersion(e.client) != "" {
 			return fmt.Errorf("A daemon already runs at %s. Stop it first, then install the service.", e.client.URL)
 		}
-		path, err := install.ServiceInstall()
+		tailscale, published := p.has("tailscale"), install.ServiceTailscale()
+		path, err := install.ServiceInstall(tailscale)
 		if err != nil {
 			return err
 		}
@@ -1034,12 +1038,22 @@ func cmdService(e *env, p parsed) error {
 			return err
 		}
 		e.printf("hc %s is running at %s and starts at login\n", v, e.client.URL)
+		if tailscale {
+			return e.tailscalePublish()
+		}
+		if published {
+			return e.tailscaleUnpublish()
+		}
 	case "uninstall":
+		published := install.ServiceTailscale()
 		path, err := install.ServiceUninstall()
 		if err != nil {
 			return err
 		}
 		e.printf("removed %s\n", path)
+		if published {
+			return e.tailscaleUnpublish()
+		}
 	case "restart":
 		return cmdRestart(e, p)
 	default:
@@ -1052,8 +1066,46 @@ func cmdService(e *env, p parsed) error {
 			daemon = "hc " + v + " at " + e.client.URL
 		}
 		e.printf("service  %s\ndaemon   %s\nlog      %s\n", service, daemon, log)
+		if install.ServiceTailscale() {
+			e.printf("tailnet  the daemon publishes the board at start (--tailscale)\n")
+		}
 	}
 	return nil
+}
+
+// tailscalePublish does now what the daemon does at start, to show where the board is or why it is not there.
+func (e *env) tailscalePublish() error {
+	cfg, err := config.Load("")
+	if err != nil {
+		return err
+	}
+	url, err := install.TailscalePublish(cfg.Port)
+	if err != nil && !errors.Is(err, install.ErrTailscaleSkipped) {
+		// The daemon just started publishing too, and a Serve config changed under it fails: look again.
+		time.Sleep(time.Second)
+		url, err = install.TailscalePublish(cfg.Port)
+	}
+	if errors.Is(err, install.ErrTailscaleSkipped) {
+		e.printf("%v\n", err)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	e.printf("on the tailnet at %s\n", url)
+	return nil
+}
+
+func (e *env) tailscaleUnpublish() error {
+	cfg, err := config.Load("")
+	if err != nil {
+		return err
+	}
+	removed, err := install.TailscaleUnpublish(cfg.Port)
+	if removed {
+		e.printf("took the board off the tailnet\n")
+	}
+	return err
 }
 
 func cmdRestart(e *env, p parsed) error {

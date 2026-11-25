@@ -227,7 +227,7 @@ func TestServiceFiles(t *testing.T) {
 	t.Setenv("HC_DB", "/tmp/other.db")
 	program := filepath.Join(tmp, "default-data", "headcoach")
 
-	unitText, err := systemdUnit()
+	unitText, err := systemdUnit(false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -249,7 +249,7 @@ func TestServiceFiles(t *testing.T) {
 		t.Error("the launcher is not executable")
 	}
 
-	plist, err := launchdPlist()
+	plist, err := launchdPlist(false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestServiceInstallRestartUninstall(t *testing.T) {
 			t.Errorf("%s: restart without a service gave %v", system, err)
 		}
 		start := time.Now()
-		path, err := ServiceInstall()
+		path, err := ServiceInstall(false)
 		if err != nil || !strings.HasPrefix(path, tmp) || !ServiceInstalled() {
 			t.Fatalf("%s: install = %s, %v", system, path, err)
 		}
@@ -334,7 +334,7 @@ func TestUnsupportedPlatform(t *testing.T) {
 	if _, err := Manager(); err == nil || !strings.Contains(err.Error(), "hc serve") {
 		t.Errorf("Manager = %v", err)
 	}
-	if _, err := ServiceInstall(); err == nil {
+	if _, err := ServiceInstall(false); err == nil {
 		t.Error("a service was installed without a service manager")
 	}
 }

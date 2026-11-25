@@ -29,6 +29,8 @@ const (
 	statusName = "hc-status.sh"
 	label      = "local.headcoach"
 	unit       = "headcoach.service"
+
+	tailscaleFlag = "--tailscale"
 )
 
 // HookEvents are the Claude Code events the board listens to.
@@ -354,7 +356,7 @@ func executable() (string, error) {
 // launcher writes a script named after the project that starts the daemon, and returns its path.
 //
 // macOS lists a login item under the name of its program: this makes it read "headcoach", not "hc".
-func launcher() (string, error) {
+func launcher(tailscale bool) (string, error) {
 	self, err := executable()
 	if err != nil {
 		return "", err
@@ -363,7 +365,11 @@ func launcher() (string, error) {
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return "", err
 	}
-	text := "#!/bin/sh\nexec " + sh.Quote(self) + " serve \"$@\"\n"
+	serve := " serve"
+	if tailscale {
+		serve += " " + tailscaleFlag
+	}
+	text := "#!/bin/sh\nexec " + sh.Quote(self) + serve + " \"$@\"\n"
 	if err := os.WriteFile(target, []byte(text), 0o755); err != nil {
 		return "", err
 	}
@@ -389,8 +395,8 @@ func xmlText(s string) string {
 	return out.String()
 }
 
-func launchdPlist() (string, error) {
-	program, err := launcher()
+func launchdPlist(tailscale bool) (string, error) {
+	program, err := launcher(tailscale)
 	if err != nil {
 		return "", err
 	}
@@ -425,8 +431,8 @@ func launchdPlist() (string, error) {
 `, nil
 }
 
-func systemdUnit() (string, error) {
-	program, err := launcher()
+func systemdUnit(tailscale bool) (string, error) {
+	program, err := launcher(tailscale)
 	if err != nil {
 		return "", err
 	}
@@ -466,8 +472,15 @@ func ServiceInstalled() bool {
 	return err == nil
 }
 
-// ServiceInstall starts the daemon now and at every login. It returns the service file.
-func ServiceInstall() (string, error) {
+// ServiceTailscale tells whether the installed service puts the board on the tailnet.
+func ServiceTailscale() bool {
+	text, err := os.ReadFile(filepath.Join(config.DataDir(), "headcoach"))
+	return err == nil && ServiceInstalled() && strings.Contains(string(text), " "+tailscaleFlag+" ")
+}
+
+// ServiceInstall starts the daemon now and at every login, with `serve --tailscale` when tailscale is set.
+// It returns the service file.
+func ServiceInstall(tailscale bool) (string, error) {
 	manager, err := Manager()
 	if err != nil {
 		return "", err
@@ -477,7 +490,7 @@ func ServiceInstall() (string, error) {
 		return "", err
 	}
 	if manager == "launchd" {
-		plist, err := launchdPlist()
+		plist, err := launchdPlist(tailscale)
 		if err != nil {
 			return "", err
 		}
@@ -490,7 +503,7 @@ func ServiceInstall() (string, error) {
 		}
 		return path, checked("launchctl", "bootstrap", domain(), path)
 	}
-	text, err := systemdUnit()
+	text, err := systemdUnit(tailscale)
 	if err != nil {
 		return "", err
 	}

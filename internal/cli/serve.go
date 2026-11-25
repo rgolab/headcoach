@@ -51,6 +51,9 @@ func cmdServe(e *env, p parsed) error {
 	// No write timeout: asking about a session takes as long as Claude Code takes to answer.
 	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	log.Printf("hc %s serves %s, database %s", version.Version, cfg.URL(), cfg.DB)
+	if p.has("tailscale") {
+		go publish(cfg.Port, loopsDone)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -67,6 +70,32 @@ func cmdServe(e *env, p parsed) error {
 		return err
 	}
 	return nil
+}
+
+// publish puts the board on the tailnet, trying again for a while when tailscale is not up yet.
+// It never stops the daemon: the board keeps serving 127.0.0.1 whatever tailscale says.
+func publish(port int, done <-chan struct{}) {
+	for try := 1; ; try++ {
+		url, err := install.TailscalePublish(port)
+		switch {
+		case err == nil:
+			log.Printf("tailscale serves the board at %s", url)
+			return
+		case !errors.Is(err, install.ErrTailscaleDown) && errors.Is(err, install.ErrTailscaleSkipped):
+			log.Printf("tailscale: %v", err)
+			return
+		case try == 20:
+			log.Printf("tailscale: gave up: %v", err)
+			return
+		case try == 1:
+			log.Printf("tailscale: %v, trying again for 10 minutes", err)
+		}
+		select {
+		case <-done:
+			return
+		case <-time.After(30 * time.Second):
+		}
+	}
 }
 
 // logged prints one line per request.

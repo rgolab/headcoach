@@ -4,6 +4,10 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Added
+
+- `hc service install --tailscale` puts the board on your tailnet each time the daemon starts, as `tailscale serve --bg 7337` does, and `hc service uninstall` takes it off again; without tailscale, or logged out, it is skipped
+
 ## [1.1.1] - 2026-11-25
 
 headcoach has a new home on GitHub. Nothing changes on your board.

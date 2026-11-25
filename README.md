@@ -62,6 +62,7 @@ Then:
 
 - `hc hooks install` connects Claude Code to the board
 - `hc service install` starts the daemon now and at every login
+- `hc service install --tailscale` also puts the board on your tailnet, see [From your phone](#from-your-phone)
 - `hc` opens the board; the first one shows how it works, once
 
 ## Keys
@@ -240,6 +241,12 @@ Then:
 - [Tailscale Serve](https://tailscale.com/kb/1312/serve) puts it on HTTPS inside your tailnet: `tailscale serve --bg 7337`
 - when the computer already serves HTTPS on 443, give Serve another port instead: `tailscale serve --bg --https=7443 7337`, and the board's address ends in `:7443`
 - Serve routes add up: `tailscale serve --https=443 off` removes one already on 443
+- `hc service install --tailscale` keeps that in place: the daemon runs `tailscale serve --bg` on 443 each time it starts, and prints the board's tailnet address
+- the daemon still listens on `127.0.0.1` only, Serve is what reaches it
+- without the `tailscale` CLI, logged out, or with 443 already serving something else, the board stays off the tailnet and the daemon runs as usual; the reason is in the daemon's log
+- at login the daemon tries again every 30 seconds for 10 minutes while tailscale comes up
+- `hc service uninstall`, or `hc service install` without `--tailscale`, takes the board off 443 again, and only when 443 still points at it
+- `hc serve --tailscale` does the same for a daemon you run yourself
 - a request from another machine needs a paired device, whatever Host it claims, and only a tailnet name (`*.ts.net`) is let in
 - `hc pair phone` prints a code; open the board's tailnet address on the phone and type it within 10 minutes
 - a code works once, and five wrong codes cancel it
@@ -285,7 +292,7 @@ Then:
 
 ## Uninstall
 
-- `hc service uninstall`
+- `hc service uninstall`, which also takes the board off the tailnet when `--tailscale` put it there
 - `hc hooks uninstall`
 - delete the `hc` binary: `~/.local/bin/hc`, or the one in your Go bin directory
 - delete `~/.local/state/headcoach` and `~/.local/share/headcoach` to drop the board data
