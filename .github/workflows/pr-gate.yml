@@ -1,7 +1,9 @@
 name: pr-gate
 
-# Labels a pull request from outside the project that links no issue, so a maintainer agrees on an
-# issue before the review. This workflow never checks out the pull request's code.
+# Labels a pull request whose author cannot push to the project and that links no issue, so a
+# maintainer agrees on an issue before the review. It asks the author's permission, since
+# author_association misses a private org membership. This workflow never checks out the pull
+# request's code.
 on:
   pull_request_target:
     types: [opened]
@@ -12,17 +14,20 @@ permissions:
 jobs:
   gate:
     runs-on: ubuntu-latest
-    if: >-
-      !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
-      && github.event.pull_request.user.login != 'dependabot[bot]'
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
       - name: Label
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
           NUMBER: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
           BODY: ${{ github.event.pull_request.body }}
         run: |
+          permission=$(gh api "repos/$REPO/collaborators/$AUTHOR/permission" --jq .permission || true)
+          case "$permission" in
+            admin | write) exit 0 ;;
+          esac
           if printf '%s\n' "$BODY" | grep -Eiq '(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?):? +#[0-9]+'; then
             exit 0
           fi
