@@ -40,6 +40,7 @@ type attached struct {
 	seen     strings.Builder
 	commands chan []string
 	pidfile  string
+	want     []string // the attach command, the board's tmux one when nil
 }
 
 // session starts a session in the board's own tmux, and serves the board on a real socket. Attaching
@@ -89,7 +90,11 @@ func (a *attached) dial(query, cookie string, header ...string) error {
 	select {
 	case command := <-a.commands:
 		// The plain attach: no display-message with the Ctrl-] hint, which hc attach and the board show.
-		eq(a.t, command, []string{"tmux", "-S", filepath.Join(a.f.tmp, "state", "tmux.sock"), "attach-session", "-t", "%0"})
+		want := a.want
+		if want == nil {
+			want = []string{"tmux", "-S", filepath.Join(a.f.tmp, "state", "tmux.sock"), "attach-session", "-t", "%0"}
+		}
+		eq(a.t, command, want)
 	case <-time.After(5 * time.Second):
 		a.t.Fatal("the daemon never started tmux attach")
 	}

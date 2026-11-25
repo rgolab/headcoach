@@ -25,6 +25,7 @@ import (
 	"github.com/rouxlabs/headcoach/internal/ask"
 	"github.com/rouxlabs/headcoach/internal/board"
 	"github.com/rouxlabs/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/herdr"
 	"github.com/rouxlabs/headcoach/internal/limits"
 	"github.com/rouxlabs/headcoach/internal/review"
 	"github.com/rouxlabs/headcoach/internal/sh"
@@ -85,6 +86,15 @@ type Tmux interface {
 	NewSession(w tmux.Window) (string, error)
 }
 
+// Herdr is what the daemon needs from Herdr. *herdr.Client is the real one.
+type Herdr interface {
+	Agents(socket string) map[string]herdr.Agent
+	Prompt(pane, text, socket string) error
+	SendKeys(pane string, keys []string, socket string) error
+	Capture(pane, socket string) string
+	Focus(pane, socket string) error
+}
+
 // Server answers the API. Most requests hold its lock, one at a time: each is a few SQLite statements.
 // Those that wait on something slow, such as git, a model or an attached terminal, take it only briefly.
 type Server struct {
@@ -92,6 +102,8 @@ type Server struct {
 	st    *store.Store
 	board *board.Board
 	tmux  Tmux
+	// Herdr talks to sessions that run in a Herdr pane. Tests replace it.
+	Herdr Herdr
 	// Ask runs Claude Code to answer a question. Tests replace it.
 	Ask func(launcher, model, prompt, cwd string) (string, error)
 	// Log reads the end of a task's conversation from its transcripts. Tests replace it.
@@ -113,8 +125,8 @@ type Server struct {
 
 // New builds the daemon over an open store.
 func New(cfg *config.Config, st *store.Store, tm Tmux) *Server {
-	return &Server{cfg: cfg, st: st, board: board.New(st, cfg), tmux: tm, Ask: ask.Run, Log: transcript.Log,
-		AttachProcess: attachProcess, attachCheck: attachCheck, Inspect: review.InspectCached,
+	return &Server{cfg: cfg, st: st, board: board.New(st, cfg), tmux: tm, Herdr: &herdr.Client{}, Ask: ask.Run,
+		Log: transcript.Log, AttachProcess: attachProcess, attachCheck: attachCheck, Inspect: review.InspectCached,
 		PRState: review.StateOf, clearWait: 15 * time.Second}
 }
 
@@ -372,6 +384,87 @@ func (s *Server) liveSession(taskID string) (*store.Session, error) {
 	return nil, nil
 }
 
+// errHerdrUnsure is a session Herdr may still run in one of several panes: nothing reaches it, and resuming
+// it could start a second claude on the same conversation.
+var errHerdrUnsure = fail(409, "More than one Herdr pane may run this session, all in its directory: answer it in Herdr")
+
+// herdrSession returns the newest session of a task that Herdr still runs, or nil, with HerdrPane set to the
+// pane it runs in now and no tmux pane. errHerdrUnsure when it cannot tell which pane that is.
+func (s *Server) herdrSession(taskID string) (*store.Session, error) {
+	sessions, err := s.st.TaskSessions(taskID)
+	if err != nil {
+		return nil, err
+	}
+	for i := len(sessions) - 1; i >= 0; i-- {
+		sess := &sessions[i]
+		if sess.HerdrPane == "" {
+			continue
+		}
+		pane, err := s.herdrPane(sess)
+		if err != nil {
+			return nil, err
+		}
+		if pane != "" {
+			sess.Pane, sess.Socket, sess.HerdrPane = "", "", pane
+			return sess, nil
+		}
+	}
+	return nil, nil
+}
+
+// herdrPane returns the Herdr pane a session runs in now, or "", or errHerdrUnsure. A pane moved to another workspace changes
+// its id, and without its Claude Code integration Herdr knows no session id: then the session is the agent
+// in its own pane, or else the only agent in its directory, as long as no other session claims that pane.
+func (s *Server) herdrPane(sess *store.Session) (string, error) {
+	agents := s.Herdr.Agents(sess.HerdrSocket)
+	for pane, agent := range agents {
+		if agent.Session == sess.SessionID {
+			return pane, nil
+		}
+	}
+	if agent, ok := agents[sess.HerdrPane]; ok && agent.Session == "" {
+		// One agent runs in a pane at a time: a session started there after this one replaced it.
+		newer, err := s.st.Sessions("WHERE herdr_socket = ? AND herdr_pane = ? AND started_at > ? LIMIT 1",
+			sess.HerdrSocket, sess.HerdrPane, sess.StartedAt)
+		if err != nil || len(newer) == 0 {
+			return sess.HerdrPane, err
+		}
+		return "", nil
+	}
+	if sess.Cwd == "" {
+		return "", nil
+	}
+	found := ""
+	for pane, agent := range agents {
+		if agent.Session != "" || agent.Cwd != sess.Cwd {
+			continue
+		}
+		// A pane id another session holds, or held after this one started, is not where this one moved.
+		other, err := s.st.Sessions("WHERE herdr_socket = ? AND herdr_pane = ? AND session_id != ?"+
+			" AND (live = 1 OR started_at > ?) LIMIT 1", sess.HerdrSocket, pane, sess.SessionID, sess.StartedAt)
+		if err != nil {
+			return "", err
+		}
+		if len(other) > 0 {
+			continue
+		}
+		if found != "" {
+			return "", errHerdrUnsure
+		}
+		found = pane
+	}
+	return found, nil
+}
+
+// reachable is liveSession, or else the session Herdr runs, which has no tmux pane: what a message reaches.
+func (s *Server) reachable(taskID string) (*store.Session, error) {
+	sess, err := s.liveSession(taskID)
+	if err != nil || sess != nil {
+		return sess, err
+	}
+	return s.herdrSession(taskID)
+}
+
 // transcripts lists the transcript of each session, in the order given.
 func transcripts(sessions []store.Session) []string {
 	paths := make([]string, len(sessions))
@@ -488,7 +581,11 @@ func (s *Server) reconcile() error {
 }
 
 func (s *Server) screenText(sess *store.Session) string {
-	lines := strings.Split(s.tmux.Capture(sess.Pane, sess.Socket), "\n")
+	shown := s.tmux.Capture(sess.Pane, sess.Socket)
+	if sess.Pane == "" {
+		shown = s.Herdr.Capture(sess.HerdrPane, sess.HerdrSocket)
+	}
+	lines := strings.Split(shown, "\n")
 	for i := range lines {
 		lines[i] = strings.TrimRight(lines[i], " \t\r")
 	}
@@ -572,7 +669,10 @@ func (s *Server) answerDialog(sess *store.Session, line string) (bool, error) {
 // view builds what the board shows of a task.
 func (s *Server) view(task *store.Task, detail bool) (*api.Task, error) {
 	now := store.Now()
-	sess, err := s.liveSession(task.ID)
+	sess, err := s.reachable(task.ID)
+	if errors.Is(err, errHerdrUnsure) {
+		sess, err = nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -643,7 +743,10 @@ func (s *Server) view(task *store.Task, detail bool) (*api.Task, error) {
 		Context:     api.Context{Tokens: used, Window: window, Pct: min(100, int(math.RoundToEven(100*float64(used)/float64(window))))},
 		Agents:      []api.Agent{},
 	}
-	if sess != nil {
+	if sess != nil && sess.Pane == "" {
+		out.Pane, out.Tmux = sess.HerdrPane, "herdr"
+		out.Attach = herdr.AttachCommand(sess.HerdrPane, sess.HerdrSocket)
+	} else if sess != nil {
 		out.Pane, out.Tmux = sess.Pane, "own"
 		if s.private(sess) {
 			out.Tmux = "hc"
@@ -855,6 +958,9 @@ func (s *Server) hook(r *http.Request) (any, error) {
 	}
 	if socket := r.Header.Get("X-Tmux-Socket"); origin.Pane != "" && socket != "" {
 		origin.Socket = config.RealPath(socket)
+	}
+	if pane, socket := r.Header.Get("X-Herdr-Pane"), r.Header.Get("X-Herdr-Socket"); pane != "" && socket != "" {
+		origin.HerdrPane, origin.HerdrSocket = pane, config.RealPath(socket)
 	}
 	hadTask := false
 	if sid, ok := payload["session_id"].(string); ok {
@@ -1202,7 +1308,10 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 		if _, known := store.StateNames[state]; !known {
 			return nil, fail(400, "Unknown state '%s'. Known: %s", state, strings.Join(store.States, ", "))
 		}
-		live, err := s.liveSession(task.ID)
+		live, err := s.reachable(task.ID)
+		if errors.Is(err, errHerdrUnsure) && state == "parked" {
+			live, err = nil, nil // parking leaves Herdr panes alone anyway
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -1219,8 +1328,8 @@ func (s *Server) patchTask(r *http.Request) (any, error) {
 				_, err = s.openWindow(task, prompt)
 			}
 		case state == "parked" && task.State != "parked":
-			// Parking closes the terminal. The session stays on disk and resumes from Start.
-			if live != nil {
+			// Parking closes the terminal, but not a Herdr pane. The session stays on disk and resumes from Start.
+			if live != nil && live.Pane != "" {
 				s.tmux.KillPane(live.Pane, live.Socket)
 			}
 			if err = s.closeSessions(task.ID); err == nil {
@@ -1266,7 +1375,7 @@ func (s *Server) startTask(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if live, err := s.liveSession(task.ID); err != nil {
+	if live, err := s.reachable(task.ID); err != nil {
 		return nil, err
 	} else if live != nil {
 		return nil, fail(409, "This task already has a live session")
@@ -1299,7 +1408,7 @@ func (s *Server) reply(r *http.Request) (any, error) {
 		return nil, err
 	}
 	label := from.label(task)
-	sess, err := s.liveSession(task.ID)
+	sess, err := s.reachable(task.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1315,7 +1424,16 @@ func (s *Server) reply(r *http.Request) (any, error) {
 		return s.refreshed(task.ID)
 	}
 	kind := "message"
-	if isDialog(task) {
+	switch {
+	case sess.Pane == "" && isDialog(task):
+		// Herdr takes no prompt while a dialog shows.
+		return nil, fail(409, "The session runs in Herdr: answer its dialog with its keys, or in Herdr.")
+	case sess.Pane == "":
+		text = board.Labeled(label, text)
+		if err := s.Herdr.Prompt(sess.HerdrPane, text, sess.HerdrSocket); err != nil {
+			return nil, fail(502, "herdr could not deliver the message: %v", err)
+		}
+	case isDialog(task):
 		if text = oneLine(text); text == "" {
 			return nil, fail(400, "The message is empty")
 		}
@@ -1331,7 +1449,7 @@ func (s *Server) reply(r *http.Request) (any, error) {
 		if err != nil {
 			return nil, fail(502, "tmux could not deliver the answer: %v", err)
 		}
-	} else {
+	default:
 		text = board.Labeled(label, text)
 		if err := s.tmux.SendText(sess.Pane, text, sess.Socket); err != nil {
 			return nil, fail(502, "tmux could not deliver the message: %v", err)
@@ -1395,7 +1513,7 @@ func (s *Server) screen(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	sess, err := s.liveSession(task.ID)
+	sess, err := s.reachable(task.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1424,14 +1542,19 @@ func (s *Server) keys(r *http.Request) (any, error) {
 	if !ok {
 		return nil, fail(400, "Send a list of key names")
 	}
-	sess, err := s.liveSession(task.ID)
+	sess, err := s.reachable(task.ID)
 	if err != nil {
 		return nil, err
 	}
 	if sess == nil {
 		return nil, fail(409, "This task has no live session to send keys to")
 	}
-	if err := s.tmux.SendKeys(sess.Pane, pressed, sess.Socket); err != nil {
+	if sess.Pane == "" {
+		err = s.Herdr.SendKeys(sess.HerdrPane, pressed, sess.HerdrSocket)
+	} else {
+		err = s.tmux.SendKeys(sess.Pane, pressed, sess.Socket)
+	}
+	if err != nil {
 		return nil, fail(400, "%v", err)
 	}
 	// Keys carry no label: the record is the only trace of who pressed them.
@@ -1451,9 +1574,15 @@ func (s *Server) focus(r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	sess, err := s.liveSession(task.ID)
+	sess, err := s.reachable(task.ID)
 	if err != nil {
 		return nil, err
+	}
+	if sess != nil && sess.Pane == "" {
+		if err := s.Herdr.Focus(sess.HerdrPane, sess.HerdrSocket); err != nil {
+			return nil, fail(502, "herdr could not switch to the session: %v", err)
+		}
+		return s.refreshed(task.ID)
 	}
 	if s.private(sess) {
 		return nil, fail(409, "This session runs in the board's own tmux. Enter it from a terminal with: hc attach %s",
@@ -1493,12 +1622,15 @@ func (s *Server) adopt(r *http.Request) (any, error) {
 	} else if !started {
 		return nil, fail(409, "This task has no session yet. Start it instead.")
 	}
-	live, err := s.liveSession(task.ID)
+	live, err := s.reachable(task.ID)
 	if err != nil {
 		return nil, err
 	}
 	if s.private(live) {
 		return nil, fail(409, "This session already runs in the board's own tmux")
+	}
+	if live != nil && live.Pane == "" {
+		return nil, fail(409, "This session runs in Herdr: it stays there")
 	}
 	if live != nil {
 		s.tmux.KillPane(live.Pane, live.Socket)

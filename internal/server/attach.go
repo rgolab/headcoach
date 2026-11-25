@@ -9,11 +9,13 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/coder/websocket"
 	"github.com/creack/pty"
+	"github.com/rouxlabs/headcoach/internal/herdr"
 	"github.com/rouxlabs/headcoach/internal/tmux"
 )
 
@@ -42,12 +44,12 @@ func attachSize(r *http.Request) *pty.Winsize {
 	return size
 }
 
-// attachTask takes a WebSocket into a task's session in the board's own tmux: tmux attach runs in a
-// pseudo-terminal on this computer, and its screen goes to the client as it would to a terminal.
-// Leaving tmux, with Ctrl-], closes the socket; closing the socket detaches tmux.
+// attachTask takes a WebSocket into a task's session in the board's own tmux, or in Herdr: tmux attach, or
+// herdr agent attach, runs in a pseudo-terminal on this computer, and its screen goes to the client as it
+// would to a terminal. Leaving, with Ctrl-], closes the socket; closing the socket detaches.
 func (s *Server) attachTask(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
-	command, err := s.attachCommand(r)
+	command, inHerdr, err := s.attachCommand(r)
 	s.mu.Unlock()
 	if err != nil {
 		respond(w, nil, err)
@@ -73,6 +75,9 @@ func (s *Server) attachTask(w http.ResponseWriter, r *http.Request) {
 
 	cmd := s.AttachProcess(command)
 	cmd.Env = append(tmux.AttachEnv(), "TERM=xterm-256color") // launchd starts the daemon without a TERM
+	if inHerdr {
+		cmd.Env = append(herdr.AttachEnv(), "TERM=xterm-256color")
+	}
 	term, err := pty.StartWithSize(cmd, size)
 	if err != nil {
 		conn.Close(websocket.StatusInternalError, "Cannot start tmux: "+err.Error())
@@ -87,6 +92,7 @@ func (s *Server) attachTask(w http.ResponseWriter, r *http.Request) {
 	// A client that leaves hangs tmux up, as a closed terminal would; tmux detaches and the session runs on.
 	// Closing the terminal is not enough: it waits for the read in progress, which waits for tmux.
 	var once sync.Once
+	var detached atomic.Bool // Ctrl-] hung a Herdr attach up
 	hangup := func() {
 		once.Do(func() {
 			_ = cmd.Process.Signal(syscall.SIGHUP)
@@ -139,7 +145,16 @@ func (s *Server) attachTask(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if kind == websocket.MessageBinary {
-				if _, err := term.Write(data); err != nil {
+				// tmux leaves on Ctrl-] by itself; Herdr is hung up, as its own detach is a prefix key.
+				typed, detach := data, false
+				if inHerdr {
+					typed, detach = herdr.BeforeDetach(data)
+				}
+				if _, err := term.Write(typed); err != nil {
+					return
+				}
+				if detach {
+					detached.Store(true)
 					return
 				}
 				continue
@@ -167,7 +182,11 @@ func (s *Server) attachTask(w http.ResponseWriter, r *http.Request) {
 	}
 	hangup()
 	<-exited
-	conn.Close(websocket.StatusNormalClosure, attachReason(cmd.ProcessState))
+	reason := attachReason(cmd.ProcessState)
+	if detached.Load() {
+		reason = "Detached"
+	}
+	conn.Close(websocket.StatusNormalClosure, reason)
 }
 
 // attachReason says why the session ended, in the 123 bytes a close frame has room for.
@@ -178,23 +197,26 @@ func attachReason(state *os.ProcessState) string {
 	return "tmux left: " + strings.TrimSpace(state.String())
 }
 
-// attachCommand is the command that enters the task's session, when it runs in the board's own tmux.
-func (s *Server) attachCommand(r *http.Request) ([]string, error) {
+// attachCommand is the command that enters the task's session, when it runs in the board's own tmux or in
+// Herdr, and whether it is Herdr's.
+func (s *Server) attachCommand(r *http.Request) ([]string, bool, error) {
 	task, err := s.find(r)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	view, err := s.view(task, false)
 	switch {
 	case err != nil:
-		return nil, err
+		return nil, false, err
 	case !view.Live:
-		return nil, fail(409, "The session is not running: start it first")
+		return nil, false, fail(409, "The session is not running: start it first")
+	case view.Tmux == "herdr":
+		return view.Attach, true, nil
 	case len(view.Attach) == 0:
-		return nil, fail(409, "The session runs in your own tmux: enter it from the computer")
+		return nil, false, fail(409, "The session runs in your own tmux: enter it from the computer")
 	}
 	// Without the Ctrl-] hint a terminal gets: the client has its own way out, a key of the app.
-	return tmux.AttachQuiet(view.Pane, s.cfg.TmuxSocket()), nil
+	return tmux.AttachQuiet(view.Pane, s.cfg.TmuxSocket()), false, nil
 }
 
 // attachProcess is the process an attached client talks to: the tmux attach command. Tests replace it.

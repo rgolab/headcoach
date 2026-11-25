@@ -82,6 +82,31 @@ func TestHookScriptIsCopiedToAStableExecutablePath(t *testing.T) {
 	}
 }
 
+func TestHookScriptSaysWhereTheSessionRuns(t *testing.T) {
+	tmp := isolate(t)
+	path, err := HookScript()
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := filepath.Join(tmp, "args")
+	write(t, filepath.Join(tmp, "bin", "curl"), "#!/bin/sh\nprintf '%s\\n' \"$@\" > "+args+"\n")
+	os.Chmod(filepath.Join(tmp, "bin", "curl"), 0o755)
+	cmd := exec.Command(path)
+	cmd.Stdin = strings.NewReader("{}")
+	cmd.Env = []string{"PATH=" + filepath.Join(tmp, "bin") + ":/usr/bin:/bin", "TMUX=/tmp/tmux-1/default,123,0",
+		"TMUX_PANE=%3", "HERDR_PANE_ID=w1:p2", "HERDR_SOCKET_PATH=/run/herdr.sock"}
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	sent := read(t, args)
+	for _, header := range []string{"X-Tmux-Pane: %3", "X-Tmux-Socket: /tmp/tmux-1/default", "X-Herdr-Pane: w1:p2",
+		"X-Herdr-Socket: /run/herdr.sock"} {
+		if !strings.Contains(sent, "\n"+header+"\n") {
+			t.Errorf("no %q in %s", header, sent)
+		}
+	}
+}
+
 func TestInstallAddsEveryEventAndKeepsOtherHooks(t *testing.T) {
 	tmp := isolate(t)
 	dir := filepath.Join(tmp, "claude")

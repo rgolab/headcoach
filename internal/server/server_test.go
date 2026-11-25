@@ -14,6 +14,7 @@ import (
 	"testing"
 
 	"github.com/rouxlabs/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/herdr"
 	"github.com/rouxlabs/headcoach/internal/review"
 	"github.com/rouxlabs/headcoach/internal/store"
 	"github.com/rouxlabs/headcoach/internal/tmux"
@@ -118,17 +119,55 @@ func (f *fakeTmux) NewSession(w tmux.Window) (string, error) {
 	return pane, nil
 }
 
+// fakeHerdr records every call the server would make to Herdr. It knows no agent until a test adds one.
+type fakeHerdr struct {
+	agents   map[string]map[string]herdr.Agent // by socket, then by pane
+	fail     string
+	screen   string
+	prompted []string // "pane|text|socket"
+	pressed  []string // "pane|keys|socket"
+	focused  []string // "pane|socket"
+}
+
+func (f *fakeHerdr) Agents(socket string) map[string]herdr.Agent { return f.agents[socket] }
+func (f *fakeHerdr) Capture(pane, socket string) string          { return f.screen }
+
+func (f *fakeHerdr) Focus(pane, socket string) error {
+	if f.fail != "" {
+		return errors.New(f.fail)
+	}
+	f.focused = append(f.focused, pane+"|"+socket)
+	return nil
+}
+
+func (f *fakeHerdr) Prompt(pane, text, socket string) error {
+	if f.fail != "" {
+		return errors.New(f.fail)
+	}
+	f.prompted = append(f.prompted, pane+"|"+text+"|"+socket)
+	return nil
+}
+
+func (f *fakeHerdr) SendKeys(pane string, keys []string, socket string) error {
+	if err := tmux.CheckKeys(keys); err != nil {
+		return err
+	}
+	f.pressed = append(f.pressed, pane+"|"+strings.Join(keys, " ")+"|"+socket)
+	return nil
+}
+
 type obj = map[string]any
 
 type fixture struct {
-	t    *testing.T
-	tmp  string
-	cfg  *config.Config
-	st   *store.Store
-	tmux *fakeTmux
-	srv  *Server
-	h    http.Handler
-	prs  map[string]review.PR // what the forge says about each pull request
+	t     *testing.T
+	tmp   string
+	cfg   *config.Config
+	st    *store.Store
+	tmux  *fakeTmux
+	herdr *fakeHerdr
+	srv   *Server
+	h     http.Handler
+	prs   map[string]review.PR // what the forge says about each pull request
 }
 
 // newFixture builds a daemon that opens windows in your own tmux, the way most of the suite expects.
@@ -154,6 +193,9 @@ func build(t *testing.T, private bool) *fixture {
 	cfg.PrivateTmux = private
 	f := &fixture{t: t, tmp: tmp, cfg: cfg, st: st, tmux: newFakeTmux()}
 	f.srv = New(cfg, st, f.tmux)
+	// The real herdr would talk to the Herdr server the tests run in, if any.
+	f.herdr = &fakeHerdr{agents: map[string]map[string]herdr.Agent{}}
+	f.srv.Herdr = f.herdr
 	f.prs = map[string]review.PR{}
 	f.srv.PRState = func(url string) review.PR { return f.prs[url] }
 	f.srv.clearWait = 0

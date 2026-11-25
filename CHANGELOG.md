@@ -4,6 +4,10 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+### Added
+
+- a session you run in a Herdr pane takes `hc reply` and `hc keys` there, through `herdr agent prompt` and `herdr agent send-keys`, `a`, `hc attach` and the phone enter it with `herdr agent attach`, and the board never resumes it while Herdr runs it: a reply used to start a second `claude` on the same conversation in the board's tmux
+
 ### Changed
 
 - the web board fits a phone: one list grouped by state with `Needs me` first, a full-screen task panel whose reply box and keys stay above the keyboard, and 44px buttons

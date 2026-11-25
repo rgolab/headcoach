@@ -26,6 +26,7 @@ import (
 	"github.com/rouxlabs/headcoach/internal/client"
 	"github.com/rouxlabs/headcoach/internal/config"
 	"github.com/rouxlabs/headcoach/internal/format"
+	"github.com/rouxlabs/headcoach/internal/herdr"
 	"github.com/rouxlabs/headcoach/internal/limits"
 	"github.com/rouxlabs/headcoach/internal/store"
 	"github.com/rouxlabs/headcoach/internal/tmux"
@@ -309,6 +310,10 @@ func (m model) attach(t api.Task, fromAgent bool) tea.Cmd {
 				return doneMsg{notice: "Sub-agents run inside the main session: switched to it"}
 			}
 			return doneMsg{err: err}
+		}
+		if len(command) > 0 && t.Tmux == "herdr" {
+			attach := herdr.NewAttach(command)
+			return tea.Exec(attach, func(err error) tea.Msg { return attachedMsg{taskID: t.ID, err: err} })()
 		}
 		environ := tmux.AttachEnv()
 		inTmux := len(command) > 0
