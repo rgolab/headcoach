@@ -4,6 +4,10 @@ All notable changes to headcoach. The format follows [Keep a Changelog](https://
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-26
+
+Sessions you start in a [Herdr](https://herdr.dev) pane now show on the board, and you answer them from the board or your phone like any other. The web board also fits a phone, and headcoach has a website: [headcoach.rouxlabs.dev](https://headcoach.rouxlabs.dev).
+
 ### Added
 
 - a session you run in a Herdr pane takes `hc reply` and `hc keys` there, through `herdr agent prompt` and `herdr agent send-keys`, `a`, `hc attach` and the phone enter it with `herdr agent attach`, and the board never resumes it while Herdr runs it: a reply used to start a second `claude` on the same conversation in the board's tmux
@@ -63,7 +67,8 @@ The first public release of headcoach. `hc` puts every Claude Code session on on
 - `hc update`, or `u` on the board, installs the latest release, checked against its `SHA256SUMS`
 - four themes: `terminal`, `bright`, `nord` and `k9s`
 
-[Unreleased]: https://github.com/rouxlabs/headcoach/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/rouxlabs/headcoach/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/rouxlabs/headcoach/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/rouxlabs/headcoach/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/rouxlabs/headcoach/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/rouxlabs/headcoach/releases/tag/v1.0.0
