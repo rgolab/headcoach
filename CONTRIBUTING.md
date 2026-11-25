@@ -7,7 +7,7 @@
 - a bug goes in an issue, with the bug report form
 - an idea or a question goes in Discussions
 - a pull request needs a maintainer's go-ahead on an issue first
-- a pull request without one is closed automatically, nothing personal
+- a pull request that links no issue is labeled `needs-issue`, nothing personal
 - using an agent to write a change is fine, you stay accountable for it
 
 ## Changes

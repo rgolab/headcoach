@@ -1,7 +1,7 @@
 name: pr-gate
 
-# Closes a pull request from outside the project. A maintainer can reopen it once an issue agreed on
-# the change. This workflow never checks out the pull request's code.
+# Labels a pull request from outside the project that links no issue, so a maintainer agrees on an
+# issue before the review. This workflow never checks out the pull request's code.
 on:
   pull_request_target:
     types: [opened]
@@ -16,9 +16,16 @@ jobs:
       !contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
       && github.event.pull_request.user.login != 'dependabot[bot]'
     steps:
-      - name: Close
+      - name: Label
         env:
           GH_TOKEN: ${{ github.token }}
-          PR: ${{ github.event.pull_request.html_url }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          BODY: ${{ github.event.pull_request.body }}
         run: |
-          gh pr close "$PR" --comment "Thanks for the change! headcoach takes bugs and ideas as issues first, see CONTRIBUTING.md. A maintainer reopens this pull request once an issue agreed on it."
+          if printf '%s\n' "$BODY" | grep -Eiq '(^|[^[:alnum:]_])(close[sd]?|fix(e[sd])?|resolve[sd]?):? +#[0-9]+'; then
+            exit 0
+          fi
+          gh api --method POST "repos/$REPO/issues/$NUMBER/labels" -f 'labels[]=needs-issue' > /dev/null
+          gh api --method POST "repos/$REPO/issues/$NUMBER/comments" \
+            -f body="Thanks for the change! headcoach takes bugs and ideas as issues first, see CONTRIBUTING.md. A maintainer reviews this pull request once an issue agreed on it." > /dev/null
