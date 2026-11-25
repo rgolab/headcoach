@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/board"
-	"github.com/humblebundledore/headcoach/internal/config"
-	"github.com/humblebundledore/headcoach/internal/schedule"
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/board"
+	"github.com/rouxlabs/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/schedule"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 // scheduleEvery is how often the daemon looks for a schedule that is due.

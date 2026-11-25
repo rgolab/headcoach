@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/board"
-	"github.com/humblebundledore/headcoach/internal/handoff"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/transcript"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/board"
+	"github.com/rouxlabs/headcoach/internal/handoff"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/transcript"
 )
 
 // handoffRead is as much of a handoff file as the board reads: a handoff is a page, not a log.

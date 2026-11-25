@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 // maxTimer is the longest timer a task takes: a week is already longer than any run it is meant for.

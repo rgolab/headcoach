@@ -9,7 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/humblebundledore/headcoach/internal/update"
+	"github.com/rouxlabs/headcoach/internal/update"
 )
 
 // fakeRelease stubs what :update and :restart reach outside the board.

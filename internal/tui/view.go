@@ -9,13 +9,13 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/board"
-	"github.com/humblebundledore/headcoach/internal/format"
-	"github.com/humblebundledore/headcoach/internal/limits"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/usage"
-	"github.com/humblebundledore/headcoach/internal/version"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/board"
+	"github.com/rouxlabs/headcoach/internal/format"
+	"github.com/rouxlabs/headcoach/internal/limits"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/usage"
+	"github.com/rouxlabs/headcoach/internal/version"
 )
 
 // The styles of the board. applyTheme fills them from the chosen palette.

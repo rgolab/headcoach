@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/format"
-	"github.com/humblebundledore/headcoach/internal/review"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/format"
+	"github.com/rouxlabs/headcoach/internal/review"
 )
 
 // gitIn runs git in dir, with no global or system config so the machine's settings do not leak in.

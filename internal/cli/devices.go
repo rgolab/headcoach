@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/format"
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/format"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 func cmdPair(e *env, p parsed) error {

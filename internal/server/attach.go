@@ -14,7 +14,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/creack/pty"
-	"github.com/humblebundledore/headcoach/internal/tmux"
+	"github.com/rouxlabs/headcoach/internal/tmux"
 )
 
 const (

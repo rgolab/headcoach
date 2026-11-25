@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/humblebundledore/headcoach/internal/board"
-	"github.com/humblebundledore/headcoach/internal/store"
-	"github.com/humblebundledore/headcoach/internal/transcript"
+	"github.com/rouxlabs/headcoach/internal/board"
+	"github.com/rouxlabs/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/transcript"
 )
 
 // sender is who sent a request: you, a task, or an agent the board cannot tie to a task.

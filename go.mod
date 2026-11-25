@@ -1,4 +1,4 @@
-module github.com/humblebundledore/headcoach
+module github.com/rouxlabs/headcoach
 
 go 1.25.0
 

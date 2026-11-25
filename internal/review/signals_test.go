@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/config"
+	"github.com/rouxlabs/headcoach/internal/config"
 )
 
 var testsRe, _ = TestMatcher(config.DefaultTestPattern)

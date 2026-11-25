@@ -3,8 +3,8 @@ package cli
 import (
 	"fmt"
 
-	"github.com/humblebundledore/headcoach/internal/api"
-	"github.com/humblebundledore/headcoach/internal/format"
+	"github.com/rouxlabs/headcoach/internal/api"
+	"github.com/rouxlabs/headcoach/internal/format"
 )
 
 // testsStyle is the color of a test result.

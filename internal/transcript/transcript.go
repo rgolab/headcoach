@@ -18,7 +18,7 @@ import (
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/util"
 
-	"github.com/humblebundledore/headcoach/internal/board"
+	"github.com/rouxlabs/headcoach/internal/board"
 )
 
 const (

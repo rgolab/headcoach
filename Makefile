@@ -1,7 +1,7 @@
 # Build, test and package hc.
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X github.com/humblebundledore/headcoach/internal/version.Version=$(VERSION)
+LDFLAGS := -s -w -X github.com/rouxlabs/headcoach/internal/version.Version=$(VERSION)
 TARGETS := darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
 
 .PHONY: build test check install dist

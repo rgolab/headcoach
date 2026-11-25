@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/humblebundledore/headcoach/internal/handoff"
+	"github.com/rouxlabs/headcoach/internal/handoff"
 )
 
 const filled = "# Handoff\n## Status\nHalfway.\n## Waiting\n- on you: a go\n## Queue\n- [x] one\n- [ ] two\n"

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 // at is a moment on Monday 2026-11-16 (or days later), local time.

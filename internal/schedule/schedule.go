@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/humblebundledore/headcoach/internal/store"
+	"github.com/rouxlabs/headcoach/internal/store"
 )
 
 // Grace is how late a schedule without catch-up may still start. Past it, the run is skipped.
