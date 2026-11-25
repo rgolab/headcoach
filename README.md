@@ -8,6 +8,8 @@
 
 Coach a team of Claude Code agents: one board for every session, in the terminal and in the browser.
 
+The website: [headcoach.rouxlabs.dev](https://headcoach.rouxlabs.dev)
+
 ![The terminal board: entering a session, replying to the agent and coming back with Ctrl-\], a coordinator and the tasks it drives, the fuzzy filter, the coordinator view, a handoff in the details, a pin, the review queue, the schedules, a task lighting up as it moves to Done, and a delete in 10 minutes](docs/demo.gif)
 
 The same board in the browser:
